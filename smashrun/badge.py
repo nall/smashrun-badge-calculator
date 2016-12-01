@@ -80,6 +80,8 @@ class BadgeSet(object):
         self._badges[140] = InItForOctober()
         self._badges[141] = InItForNovember()
         self._badges[142] = InItForDecember()
+        self._badges[143] = ColorPicker()
+        self._badges[150] = Translator()
 
     @property
     def badges(self):
@@ -446,6 +448,14 @@ class SharesWell(NoActivityBadge):
 class PackLeader(NoActivityBadge):
     def __init__(self):
         super(PackLeader, self).__init__('Pack Leader')
+
+class Translator(NoActivityBadge):
+    def __init__(self):
+        super(Translator, self).__init__('Translator')
+
+class ColorPicker(NoActivityBadge):
+    def __init__(self):
+        super(ColorPicker, self).__init__('Color Picker')
 
 ####################################################
 #
