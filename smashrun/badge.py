@@ -139,6 +139,7 @@ class BadgeSet(object):
         self._badges[223] = FourFarFurther()
         self._badges[224] = SixFarFurther()
         self._badges[225] = FurtherToFarther()
+
         # Leap year sweep
         # 365 of 730
         # A year in running
