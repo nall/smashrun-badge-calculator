@@ -174,11 +174,21 @@ class CountingBadge(Badge):
         raise NotImplementedError("subclasses must implement increment")
 
 
+##################################################################
+#
+# A counting badge that will use units from the pint package
+#
+##################################################################
 class CountingUnitsBadge(CountingBadge):
     def __init__(self, name, limit, units, reset=0):
         super(CountingUnitsBadge, self).__init__(name, limit * units, reset * units)
 
 
+##################################################################
+#
+# Misc counting badges
+#
+##################################################################
 class EarlyBird(CountingUnitsBadge):
     def __init__(self):
         super(EarlyBird, self).__init__('Early Bird', 10, UNITS.day)
@@ -206,11 +216,17 @@ class NightOwl(CountingUnitsBadge):
             return 1 * UNITS.day
         return 0 * UNITS.day
 
+##################################################################
+#
+# Badges that require a running streak (consecutive days)
+#
+##################################################################
 class RunStreakBadge(CountingUnitsBadge):
     def __init__(self, name, limit, units=UNITS.day):
         super(RunStreakBadge, self).__init__(name, limit, units)
         self.datetime_of_lastrun = None
 
+    # FIXME: this currently allows double counting of multiple runs on the same day
     def increment(self, activity):
         start_date = srdate_to_datetime(activity['startDateTimeLocal'])
 
@@ -310,6 +326,11 @@ class MiamiToronto(TotalMileageBadge):
         super(MiamiToronto, self).__init__('Miami-Toronto', 1488)
 
 
+##################################################################
+#
+# Badges that require some total distance to be run over a single week
+#
+##################################################################
 class WeeklyTotalMileage(TotalMileageBadge):
     def __init__(self, name, limit, units=UNITS.mile):
         super(WeeklyTotalMileage, self).__init__(name, limit, units)
@@ -335,6 +356,11 @@ class RockedTheWeek(WeeklyTotalMileage):
     def __init__(self):
         super(RockedTheWeek, self).__init__('Rocked the week', 25)
 
+##################################################################
+#
+# Badges that require some total distance to be run in a single month
+#
+##################################################################
 class MonthlyTotalMileageBadge(TotalMileageBadge):
     def __init__(self, name, limit, units=UNITS.mile):
         super(MonthlyTotalMileageBadge, self).__init__(name, limit, units)
@@ -545,7 +571,7 @@ class InItForDecember(InItForMonthBadge):
 
 ####################################################
 #
-# Misc Badges
+# Limited Badges
 #
 ####################################################
 class Corleone(Badge):
