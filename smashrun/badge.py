@@ -178,9 +178,33 @@ class BadgeSet(object):
         self._badges[142] = InItForDecember()
         self._badges[143] = ColorPicker()
         self._badges[144] = ThreeSixtyFiveDays()
+        # self._badges[145] = ThreeSixtyFiveOf760()
         self._badges[146] = ThreeSixtyFiveOf365()
+        #self._badges[147] = AYearInRunning()
+        #self._badges[148] = LeapYearSweep()
         self._badges[149] = SmashrunForLife()
         self._badges[150] = Translator()
+        #self._badges[151] = UltraUltra100k() ???
+        #self._badges[201] = USofR()
+        #self._badges[202] = International()
+        #self._badges[203] = TopAndBottom()
+        #self._badges[204] = FourCorners()
+        #self._badges[205] = InternationalSuperRunner()
+        #self._badges[206] = SpecialAgent()
+        #self._badges[207] = NCAAFitnessTest() ???
+        #self._badges[208] = CooperTest2800m() ???
+        #self._badges[209] = SuperAgent()
+        #self._badges[210] = ArmyRanger() ???
+        #self._badges[211] = FastStart5k() ???
+        #self._badges[212] = FastFinish5k() ???
+        #self._badges[213] = FastMiddle10k() ???
+        #self._badges[214] = FastStartAndFinish5k() ???
+        #self._badges[215] = SuperFastStart5k() ???
+        #self._badges[216] = Sunriser()
+        #self._badges[217] = FullMoonRunner()
+        #self._badges[218] = Sunsetter()
+        #self._badges[219] = LongestDay()
+        #self._badges[220] = ShortestDay()
         self._badges[221] = FourFurther()
         self._badges[222] = SixFurther()
         self._badges[223] = FourFarFurther()
@@ -191,6 +215,11 @@ class BadgeSet(object):
         # self._badges[228] = ShortAndSolid()
         # self._badges[229] = LongAndSolid()
         # self._badges[230] = LongAndRockSolid()
+        # self._badges[231] = TwoBy33()
+        # self._badges[232] = TwoBy99()
+        # self._badges[233] = TwoBy33By10k()
+        # self._badges[234] = TwoBy99By5k()
+        # self._badges[235] = TwoBy365By10k()
         self._badges[236] = TopOfTable()
         self._badges[237] = ClimbedHalfDome()
         self._badges[238] = ReachedFitzRoy()
@@ -206,39 +235,6 @@ class BadgeSet(object):
             keys_to_del = [x for x in self._badges.keys() if x not in only_ids]
             for key in keys_to_del:
                 del self._badges[key]
-
-        # Leap year sweep
-        # 365 of 730
-        # A year in running
-        # Two by 99 by 5k
-        # Two by 99 by 10k
-        # Two by 365 by 10k
-        # Two by 99
-        # Two by 33
-        
-        # Super Agent
-        # Special Agent
-
-        # --- need sunrise/moon phase/solstice
-        # Sunsetter
-        # Sunriser
-        # Full Moon Runner
-        # Shortest Day
-        # Longest Day
-
-        # --- need to lookup lat/lng
-        # U.S. of R.
-        # Top and Bottom
-        # 4 Corners
-        # International
-        # International Super Runner
-
-        # --- need pace variability info
-        # Long and steady
-        # Long and solid
-        # Long and rock solid
-        # Short and solid
-        # Short and steady
 
     @property
     def badges(self):
