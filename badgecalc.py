@@ -3,6 +3,8 @@
 
 import argparse
 import datetime
+import dateutil
+import json
 import logging
 import os
 import sys
@@ -27,16 +29,23 @@ def smashrun_client(client_id=None, client_secret=None, refresh_token=None, acce
 
 def parse_args(argv):
     parser = argparse.ArgumentParser()
+    parser.add_argument('--start_date',       type=str,                help='Start considering runs on or after this date for badges (YYYY/mm/dd)')
     parser.add_argument('--credentials_file', type=str, required=True, help='The name of the file holding service credentials')
+    parser.add_argument('--badge_datafile',   type=str,                help='The name of an option file holding pre-downloaded JSON-formatted badge data')
     parser.add_argument('--debug',            action='store_true', help='Enable verbose debug')
     args = parser.parse_args()
 
     if not os.path.isfile(args.credentials_file):
         parser.error('No such credentials file: %s' % (args.credentials_file))
+    if not os.path.isfile(args.badge_datafile):
+        parser.error('No such badge data file: %s' % (args.badge_datafile))
 
     with open(args.credentials_file, 'r') as fh:
         setattr(args, 'credentials', yaml.load(fh))
         args.credentials.setdefault('smashrun', None)
+
+    if args.start_date:
+        args.start_date = datetime.datetime.strptime(args.start_date, '%Y-%m-%d').replace(tzinfo=dateutil.tz.tzlocal())
 
     return args
 
@@ -58,18 +67,24 @@ def main(args):
     smashrun = smashrun_client(**args.credentials['smashrun'])
 
     # Update user badges
-    badgeset = BadgeSet()
+    badgeset = BadgeSet(args.start_date)
     for userbadge in smashrun.get_badges():
         badgeset.add_user_info(userbadge)
 
     start = datetime.datetime.now() - datetime.timedelta(days=335)
     logging.info("Retriving SmashRuns START: %s" % (start))
     activities = []
-    for a in smashrun.get_activities(since=start):
-        activities.append(a)
+    if args.badge_datafile:
+        with open(args.badge_datafile, 'r') as fh:
+            # Assume these are sorted already
+            activities = json.load(fh)
+    else:
+        for a in smashrun.get_activities(since=start):
+            activities.append(a)
 
-    # Reverse the activities to go through them oldest to newest
-    activities.reverse()
+        # Reverse the activities to go through them oldest to newest
+        activities.reverse()
+
     for a in activities:
         badgeset.add_activity(a)
 
