@@ -3,6 +3,8 @@
 import copy
 import dateutil
 import logging
+import math
+import sys
 from datetime import datetime
 from datetime import timedelta
 from dateutil.tz import tzoffset
@@ -30,11 +32,54 @@ def srdate_to_datetime(datestring, utc=False):
     return result.replace(tzinfo=to_zone)
 
 
+def sr_get_records(activity, key):
+    idx = -1
+    for k in activity['recordingKeys']:
+        idx += 1
+        if activity['recordingKeys'][idx] == key:
+            break
+    assert idx in range(len(activity['recordingKeys'])), "Unable to find valid index in %s for '%s'" % (activity['recordingKeys'], key)
+    return activity['recordingValues'][idx]
+
+
+def sr_elevation_delta(activity):
+    elevations = sr_get_records(activity, 'elevation')
+    min_elevation = sys.maxsize
+    max_elevation = -sys.maxsize
+    for elevation in elevations:
+        min_elevation = min(elevation, min_elevation)
+        max_elevation = max(elevation, max_elevation)
+
+    return (max_elevation - min_elevation) * UNITS.meters
+
 def avg_pace(activity, distance_unit=UNITS.mile, time_unit=UNITS.minute):
     distance = activity['distance'] * UNITS.kilometer
     time = activity['duration'] * UNITS.second
     return (time.to(time_unit) / distance.to(distance_unit)).magnitude
 
+
+def sr_pace_variability(activity):
+    distance = sr_get_records(activity, 'distance')
+    time = sr_get_records(activity, 'clock')
+    assert len(distance) == len(time), "Distance and time records should be the same length, but they aren't for activity %s" % (activity['activityId'])
+
+    paces = []  # This will be in km/s
+    for i in range(1, len(distance)):
+        d = distance[i] - distance[i-1]
+        t = time[i] - time[i-1]
+        paces.append(d / t)
+
+    def calc_mean(numbers):
+        return float(sum(numbers)) / max(len(numbers), 1)
+
+    # Determine the mean
+    mean = calc_mean(paces)
+    squares = []
+    for p in paces:
+        squares.append((p - mean) ** 2)
+
+    variance = calc_mean(squares)
+    std_dev = math.sqrt(variance)
 
 def is_different_year(d1, d2):
     if d1 is None or d2 is None:
@@ -55,7 +100,9 @@ def is_different_month(d1, d2):
         return False
 
 class BadgeSet(object):
-    def __init__(self):
+    def __init__(self, start_date, only_ids=[]):
+        self.start_date = start_date
+
         self._badges = {}
         self._badges[1] = EarlyBird()
         self._badges[2] = NightOwl()
@@ -139,6 +186,26 @@ class BadgeSet(object):
         self._badges[223] = FourFarFurther()
         self._badges[224] = SixFarFurther()
         self._badges[225] = FurtherToFarther()
+        # self._badges[226] = ShortAndSteady()
+        # self._badges[227] = LongAndSteady()
+        # self._badges[228] = ShortAndSolid()
+        # self._badges[229] = LongAndSolid()
+        # self._badges[230] = LongAndRockSolid()
+        self._badges[236] = TopOfTable()
+        self._badges[237] = ClimbedHalfDome()
+        self._badges[238] = ReachedFitzRoy()
+        self._badges[239] = MatterhornMaster()
+        self._badges[240] = ConqueredEverest()
+        self._badges[241] = ToweredPisa()
+        self._badges[242] = TopOfWashington()
+        self._badges[243] = OverTheEiffel()
+        self._badges[244] = AboveTheBurj()
+        self._badges[245] = ToPikesPeak()
+
+        if len(only_ids):
+            keys_to_del = [x for x in self._badges.keys() if x not in only_ids]
+            for key in keys_to_del:
+                del self._badges[key]
 
         # Leap year sweep
         # 365 of 730
@@ -151,20 +218,6 @@ class BadgeSet(object):
         
         # Super Agent
         # Special Agent
-
-        # --- basic elevation per run
-        # Top of Washington
-        # Over the Eiffel
-        # Above the Burj
-        # To Pike's Peak
-        # Towered Pisa
-
-        # --- basic elevation per month
-        # Top of Table
-        # Climbed Half Dome
-        # Reached Fitz Roy
-        # Matterhorn Master
-        # Conquered Everest
 
         # --- need sunrise/moon phase/solstice
         # Sunsetter
@@ -187,23 +240,25 @@ class BadgeSet(object):
         # Short and solid
         # Short and steady
 
-
-
     @property
     def badges(self):
         return self._badges.values()
 
     def add_user_info(self, info):
-        logging.info("Adding user info for ID=%s %s" % (info['id'], info['name']))
+        logging.debug("Adding user info for ID=%s %s" % (info['id'], info['name']))
         if info['id'] not in self._badges:
             logging.warning("Not adding user info for badge. Not implemented yet")
         else:
             self._badges[info['id']].add_user_info(info)
 
     def add_activity(self, activity):
-        logging.debug("Adding activity %s" % (activity['activityId']))
-        for b in self.badges:
-            b.add_activity(activity)
+        start_date = srdate_to_datetime(activity['startDateTimeLocal'])
+        if self.start_date is None or start_date >= self.start_date:
+            logging.debug("Adding activity %s" % (activity['activityId']))
+            for b in self.badges:
+                b.add_activity(activity)
+        else:
+            logging.debug("Skipping activity %s that occured before %s" % (activity['activityId'], self.start_date))
 
 
 class Badge(object):
@@ -266,7 +321,7 @@ class CountingBadge(Badge):
                                                                                  (activity['distance'] * UNITS.kilometer).to(UNITS.mile).magnitude,
                                                                                  avg_pace(activity, distance_unit=UNITS.mile, time_unit=UNITS.minutes),
                                                                                  '?')
-        logging.info("%s: %s run qualifies. count now %s" % (self.name, description, self.count))
+        logging.debug("%s: %s run qualifies. count now %s" % (self.name, description, self.count))
         if not self.acquired:
             if self.count >= self.limit:
                 self.acquire(activity)
@@ -274,7 +329,7 @@ class CountingBadge(Badge):
     def reset(self, log=True):
         self.count = self._reset
         if log:
-            logging.info("%s resetting count to %s" % (self.name, self.count))
+            logging.debug("%s resetting count to %s" % (self.name, self.count))
 
     def increment(self, activity):
         raise NotImplementedError("subclasses must implement increment")
@@ -860,7 +915,7 @@ class StairsBadge(Badge):
                 self.consecutive_months = 0
 
             if self.prev_activity_datetime is not None:
-                logging.info("%s: Distance for %s/%s: %s [%s]" % (self.name, self.prev_activity_datetime.month, self.prev_activity_datetime.year, self.cur_month, result))
+                logging.debug("%s: Distance for %s/%s: %s [%s]" % (self.name, self.prev_activity_datetime.month, self.prev_activity_datetime.year, self.cur_month, result))
             self.stepped = False
             self.prev_month = self.cur_month
             self.cur_month = 0 * UNITS.miles
@@ -936,6 +991,115 @@ class SixFarFurther(FurtherBadge):
 class FurtherToFarther(FurtherBadge):
     def __init__(self):
         super(FurtherToFarther, self).__init__('Further to farther', 6, 5 * UNITS.kilometer)
+
+####################################################
+#
+# Elevation in a single run
+#
+####################################################
+class SingleElevationBadge(Badge):
+    def __init__(self, name, height):
+        super(SingleElevationBadge, self).__init__(name)
+        self.height = height
+
+    def add_activity(self, activity):
+        delta = sr_elevation_delta(activity)
+        if delta >= self.height:
+            self.acquire(activity)
+
+class ToweredPisa(SingleElevationBadge):
+    def __init__(self):
+        super(ToweredPisa, self).__init__('Towered Pisa', 56 * UNITS.meters)
+
+class TopOfWashington(SingleElevationBadge):
+    def __init__(self):
+        super(TopOfWashington, self).__init__('Top of Washington', 169 * UNITS.meters)
+
+class OverTheEiffel(SingleElevationBadge):
+    def __init__(self):
+        super(OverTheEiffel, self).__init__('Over the Eiffel', 301 * UNITS.meters)
+
+class AboveTheBurj(SingleElevationBadge):
+    def __init__(self):
+        super(AboveTheBurj, self).__init__('Above the Burj', 830 * UNITS.meters)
+
+class ToPikesPeak(SingleElevationBadge):
+    def __init__(self):
+        super(ToPikesPeak, self).__init__('To Pike\'s Peak', 2382 * UNITS.meters)
+
+
+####################################################
+#
+# Elevation in a single month
+#
+####################################################
+class MonthlyElevationBadge(CountingUnitsBadge):
+    def __init__(self, name, limit, units=UNITS.meters):
+        super(MonthlyElevationBadge, self).__init__(name, limit, units)
+        self.datetime_of_lastrun = None
+
+    def increment(self, activity):
+        start_date = srdate_to_datetime(activity['startDateTimeLocal'])
+        if is_different_month(self.datetime_of_lastrun, start_date):
+            self.reset()
+
+        return sr_elevation_delta(activity)
+
+class TopOfTable(MonthlyElevationBadge):
+    def __init__(self):
+        super(TopOfTable, self).__init__('Top of Table', 1085)
+
+class ClimbedHalfDome(MonthlyElevationBadge):
+    def __init__(self):
+        super(ClimbedHalfDome, self).__init__('Climbed Half Dome', 2694)
+
+class ReachedFitzRoy(MonthlyElevationBadge):
+    def __init__(self):
+        super(ReachedFitzRoy, self).__init__('Reached Fitz Roy', 3359)
+
+class MatterhornMaster(MonthlyElevationBadge):
+    def __init__(self):
+        super(MatterhornMaster, self).__init__('Matterhorn master', 4478)
+
+class ConqueredEverest(MonthlyElevationBadge):
+    def __init__(self):
+        super(ConqueredEverest, self).__init__('Conquered Everest', 8848)
+
+####################################################
+#
+# Pace variability badges
+#
+####################################################
+class PaceVariabilityBadge(CountingBadge):
+    def __init__(self, name, distance, limit, tolerance):
+        super(PaceVariabilityBadge, self).__init__(name, limit)
+        self.tolerance = tolerance
+
+    def increment(self, activity):
+        variability = sr_pace_variability(activity)
+        if variability <= self.tolerance:
+            return 1
+        return 0
+
+class ShortAndSteady(PaceVariabilityBadge):
+    def __init__(self):
+        super(ShortAndSteady, self).__init__('Short and steady', 5 * UNITS.kilometer, 10, .05)
+
+class LongAndSteady(PaceVariabilityBadge):
+    def __init__(self):
+        super(LongAndSteady, self).__init__('Long and steady', 10 * UNITS.kilometer, 10, .05)
+
+class ShortAndSolid(PaceVariabilityBadge):
+    def __init__(self):
+        super(ShortAndSolid, self).__init__('Short and solid', 5 * UNITS.kilometer, 10, .04)
+
+class LongAndSolid(PaceVariabilityBadge):
+    def __init__(self):
+        super(LongAndSolid, self).__init__('Long and solid', 10 * UNITS.kilometer, 10, .04)
+
+class LongAndRockSolid(PaceVariabilityBadge):
+    def __init__(self):
+        super(LongAndRockSolid, self).__init__('Long and rock solid', 10 * UNITS.kilometer, 10, .03)
 
 ####################################################
 #
