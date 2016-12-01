@@ -63,6 +63,11 @@ class BadgeSet(object):
         self._badges[38] = SocialSeven()
         self._badges[39] = SharesWell()
         self._badges[40] = PackLeader()
+        self._badges[101] = NYCPhilly()
+        self._badges[102] = LondonParis()
+        self._badges[103] = SydneyMelbourne()
+        self._badges[104] = NYCChicago()
+        self._badges[105] = MiamiToronto()
         self._badges[131] = InItForJanuary()
         self._badges[132] = InItForFebruary()
         self._badges[133] = InItForMarch()
@@ -75,7 +80,6 @@ class BadgeSet(object):
         self._badges[140] = InItForOctober()
         self._badges[141] = InItForNovember()
         self._badges[142] = InItForDecember()
-
 
     @property
     def badges(self):
@@ -277,6 +281,31 @@ class ACenturyDown(TotalMileageBadge):
 class Monster500(TotalMileageBadge):
     def __init__(self):
         super(Monster500, self).__init__('Monster 500', 500)
+
+##################################################################
+#
+# City to city badges
+#
+##################################################################
+class NYCPhilly(TotalMileageBadge):
+    def __init__(self):
+        super(NYCPhilly, self).__init__('NYC-Philly', 93)
+
+class LondonParis(TotalMileageBadge):
+    def __init__(self):
+        super(LondonParis, self).__init__('London-Paris', 232)
+
+class SydneyMelbourne(TotalMileageBadge):
+    def __init__(self):
+        super(SydneyMelbourne, self).__init__('Sydney-Melbourne', 561)
+
+class NYCChicago(TotalMileageBadge):
+    def __init__(self):
+        super(NYCChicago, self).__init__('NYC-Chicago', 858)
+
+class MiamiToronto(TotalMileageBadge):
+    def __init__(self):
+        super(MiamiToronto, self).__init__('Miami-Toronto', 1488)
 
 
 class WeeklyTotalMileage(TotalMileageBadge):
