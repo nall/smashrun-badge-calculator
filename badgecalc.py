@@ -29,9 +29,10 @@ def smashrun_client(client_id=None, client_secret=None, refresh_token=None, acce
 
 def parse_args(argv):
     parser = argparse.ArgumentParser()
-    parser.add_argument('--start_date',       type=str,                help='Start considering runs on or after this date for badges (YYYY/mm/dd)')
-    parser.add_argument('--credentials_file', type=str, required=True, help='The name of the file holding service credentials')
-    parser.add_argument('--badge_datafile',   type=str,                help='The name of an option file holding pre-downloaded JSON-formatted badge data')
+    parser.add_argument('--start_date',       type=str,                  help='Start considering runs on or after this date for badges (YYYY/mm/dd)')
+    parser.add_argument('--credentials_file', type=str, required=True,   help='The name of the file holding service credentials')
+    parser.add_argument('--badge_datafile',   type=str,                  help='The name of an option file holding pre-downloaded JSON-formatted badge data')
+    parser.add_argument('--test_id',          type=int, action='append', help='Test the specified badge ID. Can be specified multiple times')
     parser.add_argument('--debug',            action='store_true', help='Enable verbose debug')
     args = parser.parse_args()
 
@@ -47,12 +48,16 @@ def parse_args(argv):
     if args.start_date:
         args.start_date = datetime.datetime.strptime(args.start_date, '%Y-%m-%d').replace(tzinfo=dateutil.tz.tzlocal())
 
+    if args.test_id is None:
+        args.test_id = []
+
     return args
 
 
 def setup(argv):
     args = parse_args(argv)
     logging.basicConfig(filename='badgecalc.log',
+                        filemode='w',
                         level=logging.DEBUG if args.debug else logging.INFO)
     console = logging.StreamHandler()
     console.setLevel(logging.DEBUG if args.debug else logging.INFO)
@@ -67,7 +72,7 @@ def main(args):
     smashrun = smashrun_client(**args.credentials['smashrun'])
 
     # Update user badges
-    badgeset = BadgeSet(args.start_date)
+    badgeset = BadgeSet(args.start_date, args.test_id)
     for userbadge in smashrun.get_badges():
         badgeset.add_user_info(userbadge)
 
