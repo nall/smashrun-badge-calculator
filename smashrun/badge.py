@@ -1,8 +1,8 @@
 # vim: ft=python expandtab softtabstop=0 tabstop=4 shiftwidth=4
 
 import copy
-import ephem
 import dateutil
+import ephem
 import geocoder
 import logging
 import math
@@ -336,11 +336,11 @@ class BadgeSet(object):
         # self._badges[228] = ShortAndSolid()
         # self._badges[229] = LongAndSolid()
         # self._badges[230] = LongAndRockSolid()
-        #self._badges[231] = TwoBy33()
-        #self._badges[232] = TwoBy99()
-        #self._badges[233] = TwoBy33By10k()
-        #self._badges[234] = TwoBy99By5k()
-        #self._badges[235] = TwoBy365By10k()
+        self._badges[231] = TwoBy33()
+        self._badges[232] = TwoBy99()
+        self._badges[233] = TwoBy33By10k()
+        self._badges[234] = TwoBy99By5k()
+        self._badges[235] = TwoBy365By10k()
         self._badges[236] = TopOfTable()
         self._badges[237] = ClimbedHalfDome()
         self._badges[238] = ReachedFitzRoy()
@@ -371,7 +371,7 @@ class BadgeSet(object):
     def add_activity(self, activity):
         start_date = sr_get_start_time(activity)
         if self.start_date is None or start_date >= self.start_date:
-            logging.debug("Adding activity %s" % (activity['activityId']))
+            logging.debug("Adding activity %s %s" % (sr_get_start_time(activity), activity['activityId']))
             for b in self.badges:
                 b.add_activity(activity)
         else:
@@ -430,6 +430,9 @@ class CountingBadge(Badge):
         self.reset(log=False)
 
     def add_activity(self, activity):
+        if self.acquired:
+            return
+
         # Do this in two steps. increment() may invoke reset()
         delta = self.increment(activity)
         self.count += delta
@@ -461,6 +464,7 @@ class CountingBadge(Badge):
 class CountingUnitsBadge(CountingBadge):
     def __init__(self, name, limit, units, reset=0):
         super(CountingUnitsBadge, self).__init__(name, limit * units, reset * units)
+        self.units = units
 
 
 ##################################################################
@@ -554,25 +558,43 @@ class LunchHour(CountingUnitsBadge):
 # Badges that require a running streak (consecutive days)
 #
 ##################################################################
-class RunStreakBadge(CountingUnitsBadge):
-    def __init__(self, name, limit, units=UNITS.day):
-        super(RunStreakBadge, self).__init__(name, limit, units)
-        self.datetime_of_lastrun = None
+class RunStreakBadge(CountingBadge):
+    def __init__(self, name, limit, days_between_runs=1, min_distance=None):
+        limit = int(math.ceil(float(limit) / float(days_between_runs)))
+        super(RunStreakBadge, self).__init__(name, limit)
+        self.date_of_next_run = None
+        self.days_between_runs = days_between_runs
+        self.min_distance = min_distance
 
-    # FIXME: this currently allows double counting of multiple runs on the same day
+    @staticmethod
+    def midnight_of_datetime(dt):
+        return dt.replace(hour=0, minute=0, second=0, microsecond=0)
+
     def increment(self, activity):
-        start_date = sr_get_start_time(activity)
 
-        streak_broken = False
-        if self.datetime_of_lastrun is not None:
-            delta = start_date - self.datetime_of_lastrun
-            streak_broken = delta.days > 1 or (delta.days == 1 and (delta.seconds > 0 or delta.microseconds > 0))
+        result = 0
+        if self.min_distance is not None and sr_get_distance(activity) < self.min_distance:
+            # If there's a minimum distance and this doesn't qualify, just return 0
+            # Don't udpate or reset anything else
+            pass
+        else:
+            start_date = sr_get_start_time(activity)
+            if self.date_of_next_run is None:
+                self.date_of_next_run = RunStreakBadge.midnight_of_datetime(start_date)
 
-        if streak_broken:
-            self.reset()
+            if start_date < self.date_of_next_run:
+                # This run doesn't qualify. Don't update or reset anything
+                pass
+            else:
+                if start_date > (self.date_of_next_run + timedelta(days=1)):
+                    # We broke the streak :(
+                    logging.debug("%s broken due to no run on %s" % (self.name, self.date_of_next_run.strftime('%Y-%m-%d')))
+                    self.reset()
 
-        self.datetime_of_lastrun = start_date
-        return 1 * UNITS.day
+                result = 1
+                self.date_of_next_run = RunStreakBadge.midnight_of_datetime(start_date + timedelta(days=self.days_between_runs))
+
+        return result
 
 class OneMile(RunStreakBadge):
     def __init__(self):
@@ -602,6 +624,27 @@ class ThreeSixtyFiveOf365(RunStreakBadge):
     def __init__(self):
         super(ThreeSixtyFiveOf365, self).__init__('365 of 365', 365)
 
+class TwoBy33(RunStreakBadge):
+    def __init__(self):
+        super(TwoBy33, self).__init__('Two by 33', 33, 2)
+
+class TwoBy99(RunStreakBadge):
+    def __init__(self):
+        super(TwoBy99, self).__init__('Two by 99', 99, 2)
+
+class TwoBy33By10k(RunStreakBadge):
+    def __init__(self):
+        super(TwoBy33By10k, self).__init__('Two by 33 by 10k', 33, 2, 10 * UNITS.kilometer)
+
+class TwoBy99By5k(RunStreakBadge):
+    def __init__(self):
+        super(TwoBy99By5k, self).__init__('Two by 99 by 5k', 99, 2, 5 * UNITS.kilometer)
+
+class TwoBy365By10k(RunStreakBadge):
+    def __init__(self):
+        super(TwoBy365By10k, self).__init__('Two by 365 by 10k', 365, 2, 10 * UNITS.kilometer)
+
+
 class AYearInRunning(RunStreakBadge):
     def __init__(self, name='A year in running', days=365):
         super(AYearInRunning, self).__init__(name, days)
@@ -630,9 +673,9 @@ class AYearInRunning(RunStreakBadge):
             self.datetime_of_lastrun = start_date
 
         if self.enabled:
-            return 1 * UNITS.day
+            return 1
         else:
-            return 0 * UNITS.days
+            return 0
 
     def reset(self, log=True):
         self.enabled = False
@@ -1436,41 +1479,6 @@ class Sunsetter(CountingBadge):
         if sr_is_sunset_activity(activity):
             return 1
         return 0
-
-
-####################################################
-#
-# 2-By-X Badges
-#
-####################################################
-class TwoByBadge():
-    def __init__(self, name, min_days, min_distance):
-        super(TwoByBadge, self).__init__(name)
-        self.min_days = min_days
-        self.min_distance = min_distance
-        
-    def add_activity(self, activity):
-        assert False, "FIXME"
-
-class TwoBy33(TwoByBadge):
-    def __init__(self):
-        super(TwoBy33, self).__init__('Two by 33', 33, None)
-
-class TwoBy99(TwoByBadge):
-    def __init__(self):
-        super(TwoBy99, self).__init__('Two by 99', 99, None)
-
-class TwoBy33By10k(TwoByBadge):
-    def __init__(self):
-        super(TwoBy33By10k, self).__init__('Two by 33 by 10k', 33, 10 * UNITS.kilometer)
-
-class TwoBy99By5k(TwoByBadge):
-    def __init__(self):
-        super(TwoBy99By5k, self).__init__('Two by 99 by 5k', 99, 5 * UNITS.kilometer)
-
-class TwoBy365By10k(TwoByBadge):
-    def __init__(self):
-        super(TwoBy365By10k, self).__init__('Two by 365 by 10k', 365, 10 * UNITS.kilometer)
 
 
 ####################################################
