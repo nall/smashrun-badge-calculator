@@ -104,7 +104,7 @@ def sr_get_sun_info(activity, rise_or_set, prev=False):
     o.lat = str(lat)
     o.lon = str(lon)
     o.elev = sr_get_elevations(activity)[0]
-    o.date = start_date.replace(tzinfo=dateutil.tz.tzutc()).strftime('%Y-%m-%d %H:%M:%S')
+    o.date = start_date.astimezone(dateutil.tz.tzutc()).strftime('%Y-%m-%d %H:%M:%S')
     o.pressure = 0       # U.S. Naval Astronomical Almanac value
     o.horizon = '-0:34'  # U.S. Naval Astronomical Almanac value
 
@@ -121,11 +121,35 @@ def sr_get_sun_info(activity, rise_or_set, prev=False):
         else:
             result = o.next_setting(sun)
 
-    d = result.datetime().replace(tzinfo=dateutil.tz.tzutc())
-    e = d.astimezone(start_date.tzinfo)
-
     return result.datetime().replace(tzinfo=dateutil.tz.tzutc()).astimezone(start_date.tzinfo)
 
+
+def sr_get_moon_illumination_pct(activity):
+    start_date = sr_get_start_time(activity)
+
+    o = ephem.Observer()
+    lat, lon = sr_get_start_coordinates(activity)
+    o.lat = str(lat)
+    o.lon = str(lon)
+    o.elev = sr_get_elevations(activity)[0]
+    o.date = start_date.replace(tzinfo=dateutil.tz.tzutc()).strftime('%Y-%m-%d %H:%M:%S')
+    o.pressure = 0       # U.S. Naval Astronomical Almanac value
+    o.horizon = '-0:34'  # U.S. Naval Astronomical Almanac value
+
+    return ephem.Moon(o).phase
+
+
+def sr_is_between_sunset_and_sunrise(activity):
+    start_date = sr_get_start_time(activity)
+    p_sunset = sr_get_sun_info(activity, 'sunset', prev=True)
+    n_sunrise = sr_get_sun_info(activity, 'sunrise')
+
+    if is_same_day(p_sunset, start_date) and start_date > p_sunset:
+        return True
+    elif is_same_day(n_sunrise, start_date) and start_date < p_sunset:
+        return True
+    else:
+        return False
 
 def sr_is_sunrise_activity(activity):
     start_date = sr_get_start_time(activity)
@@ -275,10 +299,10 @@ class BadgeSet(object):
         self._badges[142] = InItForDecember()
         self._badges[143] = ColorPicker()
         self._badges[144] = ThreeSixtyFiveDays()
-        #self._badges[145] = ThreeSixtyFiveOf760()
+        #self._badges[145] = ThreeSixtyFiveOf730()
         self._badges[146] = ThreeSixtyFiveOf365()
-        #self._badges[147] = AYearInRunning()
-        #self._badges[148] = LeapYearSweep()
+        self._badges[147] = AYearInRunning()
+        self._badges[148] = LeapYearSweep()
         self._badges[149] = SmashrunForLife()
         self._badges[150] = Translator()
         #self._badges[151] = TBD_UltraUltra100k()
@@ -298,7 +322,7 @@ class BadgeSet(object):
         #self._badges[214] = TBD_FastStartAndFinish5k()
         #self._badges[215] = TBD_SuperFastStart5k()
         self._badges[216] = Sunriser()
-        #self._badges[217] = FullMoonRunner()
+        self._badges[217] = FullMoonRunner()
         self._badges[218] = Sunsetter()
         self._badges[219] = LongestDay()
         self._badges[220] = ShortestDay()
@@ -409,12 +433,13 @@ class CountingBadge(Badge):
         # Do this in two steps. increment() may invoke reset()
         delta = self.increment(activity)
         self.count += delta
-        description = '[ID=%s START=%s DIST=%smi AVGPACE=%smin/mi ELEV=%s\']' % (activity['activityId'],
-                                                                                 sr_get_start_time(activity).strftime('%Y-%m-%d %H:%M'),
-                                                                                 sr_get_distance(activity).to(UNITS.mile).magnitude,
-                                                                                 sr_avg_pace(activity, distance_unit=UNITS.mile, time_unit=UNITS.minutes),
-                                                                                 '?')
-        logging.debug("%s: %s run qualifies. count now %s" % (self.name, description, self.count))
+        if delta:
+            description = '[ID=%s START=%s DIST=%smi AVGPACE=%smin/mi ELEV=%s\']' % (activity['activityId'],
+                                                                                     sr_get_start_time(activity).strftime('%Y-%m-%d %H:%M'),
+                                                                                     sr_get_distance(activity).to(UNITS.mile).magnitude,
+                                                                                     sr_avg_pace(activity, distance_unit=UNITS.mile, time_unit=UNITS.minutes),
+                                                                                     '?')
+            logging.debug("%s: %s run qualifies. count now %s" % (self.name, description, self.count))
         if not self.acquired:
             if self.count >= self.limit:
                 self.acquire(activity)
@@ -577,6 +602,54 @@ class ThreeSixtyFiveOf365(RunStreakBadge):
     def __init__(self):
         super(ThreeSixtyFiveOf365, self).__init__('365 of 365', 365)
 
+class AYearInRunning(RunStreakBadge):
+    def __init__(self, name='A year in running', days=365):
+        super(AYearInRunning, self).__init__(name, days)
+        self.enabled = False
+
+    def should_enable(self, activity):
+        start_date = sr_get_start_time(activity)
+        return start_date.month == 1 and start_date.day == 1
+
+    def increment(self, activity):
+        if self.should_enable(activity):
+            self.enabled = True
+
+        if self.enabled:
+            # FIXME: This double counts days -- see RunStreakBadge
+            start_date = sr_get_start_time(activity)
+
+            streak_broken = False
+            if self.datetime_of_lastrun is not None:
+                delta = start_date - self.datetime_of_lastrun
+                streak_broken = delta.days > 1 or (delta.days == 1 and (delta.seconds > 0 or delta.microseconds > 0))
+
+            if streak_broken:
+                self.reset()
+
+            self.datetime_of_lastrun = start_date
+
+        if self.enabled:
+            return 1 * UNITS.day
+        else:
+            return 0 * UNITS.days
+
+    def reset(self, log=True):
+        self.enabled = False
+        self.datetime_of_lastrun = None
+        super(AYearInRunning, self).reset(log)
+
+
+class LeapYearSweep(AYearInRunning):
+    def __init__(self):
+        super(LeapYearSweep, self).__init__('Leap year sweep', 366)
+
+    def is_leap_year(self, year):
+        return year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)
+
+    def should_enable(self, activity):
+        start_date = sr_get_start_time(activity)
+        return self.is_leap_year(start_date.year) and start_date.month == 1 and start_date.day == 1
 
 
 ##################################################################
@@ -1307,18 +1380,14 @@ class FourCorners(Badge):
 class FullMoonRunner(CountingBadge):
     def __init__(self):
         super(FullMoonRunner, self).__init__('Full Moon Runner', 10)
+        self.full_pct = 99.0
 
     def increment(self, activity):
-        date = sr_get_start_time(activity)
-        pfm = ephem.localtime(ephem.previous_full_moon(date))
-        nfm = ephem.localtime(ephem.next_full_moon(date))
-
-        delta = 0
-        if pfm.year == date.year and pfm.month == date.month and pfm.day == date.day and pfm.hour >= 12:
-            delta = 1
-        elif nfm.year == date.year and nfm.month == date.month and nfm.day == date.day and nfm.hour >= 12:
-            delta = 1
-        return delta
+        pct_ill = sr_get_moon_illumination_pct(activity)
+        if pct_ill > self.full_pct:
+            if sr_is_between_sunset_and_sunrise(activity):
+                return 1
+        return 0
 
 
 class SolsticeBadge(Badge):
@@ -1367,6 +1436,41 @@ class Sunsetter(CountingBadge):
         if sr_is_sunset_activity(activity):
             return 1
         return 0
+
+
+####################################################
+#
+# 2-By-X Badges
+#
+####################################################
+class TwoByBadge():
+    def __init__(self, name, min_days, min_distance):
+        super(TwoByBadge, self).__init__(name)
+        self.min_days = min_days
+        self.min_distance = min_distance
+        
+    def add_activity(self, activity):
+        assert False, "FIXME"
+
+class TwoBy33(TwoByBadge):
+    def __init__(self):
+        super(TwoBy33, self).__init__('Two by 33', 33, None)
+
+class TwoBy99(TwoByBadge):
+    def __init__(self):
+        super(TwoBy99, self).__init__('Two by 99', 99, None)
+
+class TwoBy33By10k(TwoByBadge):
+    def __init__(self):
+        super(TwoBy33By10k, self).__init__('Two by 33 by 10k', 33, 10 * UNITS.kilometer)
+
+class TwoBy99By5k(TwoByBadge):
+    def __init__(self):
+        super(TwoBy99By5k, self).__init__('Two by 99 by 5k', 99, 5 * UNITS.kilometer)
+
+class TwoBy365By10k(TwoByBadge):
+    def __init__(self):
+        super(TwoBy365By10k, self).__init__('Two by 365 by 10k', 365, 10 * UNITS.kilometer)
 
 
 ####################################################
