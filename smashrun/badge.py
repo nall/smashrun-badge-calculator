@@ -49,40 +49,6 @@ def sr_get_distance(activity):
     return distance
 
 
-def sr_get_sun_info(activity, rise_or_set, prev=False):
-    if rise_or_set not in ['sunrise', 'sunset']:
-        raise ValueError("rise_or_set must be one of 'sunrise' or 'sunset', but saw '%s'" % (rise_or_set))
-
-    start_date = sr_get_start_time(activity)
-
-    o = ephem.Observer()
-    lat, lon = sr_get_start_coordinates(activity)
-    o.lat = str(lat)
-    o.lon = str(lon)
-    o.elev = sr_get_elevations(activity)[0]
-    o.date = start_date.replace(tzinfo=dateutil.tz.tzutc()).strftime('%Y-%m-%d %H:%M:%S')
-    o.pressure = 0       # U.S. Naval Astronomical Almanac value
-    o.horizon = '-0:34'  # U.S. Naval Astronomical Almanac value
-
-    sun = ephem.Sun()
-    result = None
-    if rise_or_set == 'sunrise':
-        if prev:
-            result = o.previous_rising(sun)
-        else:
-            result = o.next_rising(sun)
-    else:
-        if prev:
-            result = o.previous_setting(sun)
-        else:
-            result = o.next_setting(sun)
-
-    d = result.datetime().replace(tzinfo=dateutil.tz.tzutc())
-    e = d.astimezone(start_date.tzinfo)
-
-    return result.datetime().replace(tzinfo=dateutil.tz.tzutc()).astimezone(start_date.tzinfo)
-
-
 def sr_get_duration(activity):
     duration = activity['duration'] * UNITS.seconds
     return duration
@@ -125,6 +91,82 @@ def sr_avg_pace(activity, distance_unit=UNITS.mile, time_unit=UNITS.minute, keep
 
 def sr_get_start_coordinates(activity):
     return (activity['startLatitude'], activity['startLongitude'])
+
+
+def sr_get_sun_info(activity, rise_or_set, prev=False):
+    if rise_or_set not in ['sunrise', 'sunset']:
+        raise ValueError("rise_or_set must be one of 'sunrise' or 'sunset', but saw '%s'" % (rise_or_set))
+
+    start_date = sr_get_start_time(activity)
+
+    o = ephem.Observer()
+    lat, lon = sr_get_start_coordinates(activity)
+    o.lat = str(lat)
+    o.lon = str(lon)
+    o.elev = sr_get_elevations(activity)[0]
+    o.date = start_date.replace(tzinfo=dateutil.tz.tzutc()).strftime('%Y-%m-%d %H:%M:%S')
+    o.pressure = 0       # U.S. Naval Astronomical Almanac value
+    o.horizon = '-0:34'  # U.S. Naval Astronomical Almanac value
+
+    sun = ephem.Sun()
+    result = None
+    if rise_or_set == 'sunrise':
+        if prev:
+            result = o.previous_rising(sun)
+        else:
+            result = o.next_rising(sun)
+    else:
+        if prev:
+            result = o.previous_setting(sun)
+        else:
+            result = o.next_setting(sun)
+
+    d = result.datetime().replace(tzinfo=dateutil.tz.tzutc())
+    e = d.astimezone(start_date.tzinfo)
+
+    return result.datetime().replace(tzinfo=dateutil.tz.tzutc()).astimezone(start_date.tzinfo)
+
+
+def sr_is_sunrise_activity(activity):
+    start_date = sr_get_start_time(activity)
+    end_date = start_date + timedelta(seconds=sr_get_duration(activity).magnitude)
+    n_sunrise = sr_get_sun_info(activity, 'sunrise')
+
+    # If the next sunrise is on this day
+    if is_same_day(n_sunrise, start_date):
+        if start_date < n_sunrise and end_date > n_sunrise:
+            return True
+    return False
+
+
+def sr_is_sunset_activity(activity):
+    start_date = sr_get_start_time(activity)
+    end_date = start_date + timedelta(seconds=sr_get_duration(activity).magnitude)
+    n_sunset = sr_get_sun_info(activity, 'sunset')
+
+    # If the next sunset is on this day
+    if is_same_day(n_sunset, start_date):
+        if start_date < n_sunset and end_date > n_sunset:
+            return True
+    return False
+
+
+def sr_is_solstice(activity, solstice):
+    if solstice not in ['summer', 'winter']:
+        raise ValueError("solstice must be one of 'summer' or 'winter', but saw '%s'" % (solstice))
+
+    start_date = sr_get_start_time(activity)
+    solstice_date = None
+    if solstice == 'summer':
+        solstice_date = ephem.next_solstice(str(start_date.year))
+    else:
+        solstice_date = ephem.previous_solstice(str(start_date.year + 1))
+
+    # Convert solstice date to same TZ as start_date
+    solstice_date = solstice_date.datetime().replace(tzinfo=dateutil.tz.tzutc()).astimezone(start_date.tzinfo)
+
+    # This is solstice if we're on the same day
+    return is_same_day(solstice_date, start_date)
 
 
 def is_same_day(d1, d2):
@@ -258,8 +300,8 @@ class BadgeSet(object):
         self._badges[216] = Sunriser()
         #self._badges[217] = FullMoonRunner()
         self._badges[218] = Sunsetter()
-        #self._badges[219] = LongestDay()
-        #self._badges[220] = ShortestDay()
+        self._badges[219] = LongestDay()
+        self._badges[220] = ShortestDay()
         self._badges[221] = FourFurther()
         self._badges[222] = SixFurther()
         self._badges[223] = FourFarFurther()
@@ -270,11 +312,11 @@ class BadgeSet(object):
         # self._badges[228] = ShortAndSolid()
         # self._badges[229] = LongAndSolid()
         # self._badges[230] = LongAndRockSolid()
-        # self._badges[231] = TwoBy33()
-        # self._badges[232] = TwoBy99()
-        # self._badges[233] = TwoBy33By10k()
-        # self._badges[234] = TwoBy99By5k()
-        # self._badges[235] = TwoBy365By10k()
+        #self._badges[231] = TwoBy33()
+        #self._badges[232] = TwoBy99()
+        #self._badges[233] = TwoBy33By10k()
+        #self._badges[234] = TwoBy99By5k()
+        #self._badges[235] = TwoBy365By10k()
         self._badges[236] = TopOfTable()
         self._badges[237] = ClimbedHalfDome()
         self._badges[238] = ReachedFitzRoy()
@@ -1279,20 +1321,41 @@ class FullMoonRunner(CountingBadge):
         return delta
 
 
+class SolsticeBadge(Badge):
+    def __init__(self, name, solstice):
+        super(SolsticeBadge, self).__init__(name)
+        self.solstice = solstice
+        self.sunrise = False
+        self.sunset = False
+
+    def add_activity(self, activity):
+        if sr_is_solstice(activity, self.solstice):
+            logging.debug("Solstice[%s]: %s" % (self.solstice, sr_get_start_time(activity)))
+            if sr_is_sunrise_activity(activity):
+                self.sunrise = True
+            if sr_is_sunset_activity(activity):
+                self.sunset = True
+
+            if self.sunrise and self.sunset:
+                self.acquire(activity)
+
+class LongestDay(SolsticeBadge):
+    def __init__(self):
+        super(LongestDay, self).__init__('Longest Day', 'summer')
+
+
+class ShortestDay(SolsticeBadge):
+    def __init__(self):
+        super(ShortestDay, self).__init__('Shortest Day', 'winter')
+
+
 class Sunriser(CountingBadge):
     def __init__(self):
         super(Sunriser, self).__init__('Sunriser', 10)
 
     def increment(self, activity):
-        start_date = sr_get_start_time(activity)
-        end_date = start_date + timedelta(seconds=sr_get_duration(activity).magnitude)
-        n_sunrise = sr_get_sun_info(activity, 'sunrise')
-        logging.info("SUNRISE @ %s" % (n_sunrise))
-
-        # If the next sunrise is on this day
-        if is_same_day(n_sunrise, start_date):
-            if start_date < n_sunrise and end_date > n_sunrise:
-                return 1
+        if sr_is_sunrise_activity(activity):
+            return 1
         return 0
 
 
@@ -1301,14 +1364,8 @@ class Sunsetter(CountingBadge):
         super(Sunsetter, self).__init__('Sunsetter', 10)
 
     def increment(self, activity):
-        start_date = sr_get_start_time(activity)
-        end_date = start_date + timedelta(seconds=sr_get_duration(activity).magnitude)
-        n_sunset = sr_get_sun_info(activity, 'sunset')
-
-        # If the next sunset is on this day
-        if is_same_day(n_sunset, start_date):
-            if start_date < n_sunset and end_date > n_sunset:
-                return 1
+        if sr_is_sunset_activity(activity):
+            return 1
         return 0
 
 
