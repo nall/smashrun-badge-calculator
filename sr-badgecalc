@@ -10,7 +10,7 @@ import os
 import sys
 import yaml
 from smashrun.client import Smashrun
-from smashrun.badge import BadgeSet
+from smashrun.badges import BadgeSet
 
 
 def smashrun_client(client_id=None, client_secret=None, refresh_token=None, access_token=None):
