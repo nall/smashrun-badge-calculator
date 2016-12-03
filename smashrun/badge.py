@@ -383,7 +383,7 @@ class BadgeSet(object):
 
 
 class Badge(object):
-    def __init__(self, name, requires_unique_days=True):
+    def __init__(self, name, requires_unique_days=False):
         self.activityId = None
         self.actualEarnedDate = None
         self.info = {}
@@ -440,8 +440,8 @@ class Badge(object):
 #
 ##################################################################
 class CountingBadge(Badge):
-    def __init__(self, name, limit, reset=0):
-        super(CountingBadge, self).__init__(name)
+    def __init__(self, name, limit, reset=0, **kwargs):
+        super(CountingBadge, self).__init__(name, **kwargs)
         self.limit = limit
         self._reset = reset
         self.reset(log=False)
@@ -476,8 +476,8 @@ class CountingBadge(Badge):
 #
 ##################################################################
 class CountingUnitsBadge(CountingBadge):
-    def __init__(self, name, limit, units, reset=0):
-        super(CountingUnitsBadge, self).__init__(name, limit * units, reset * units)
+    def __init__(self, name, limit, units, reset=0, **kwargs):
+        super(CountingUnitsBadge, self).__init__(name, limit * units, reset * units, **kwargs)
         self.units = units
 
 
@@ -513,10 +513,6 @@ class OutlastTheAlamo(TotalTimeBadge):
     def __init__(self):
         super(OutlastTheAlamo, self).__init__('Outlast the Alamo', 312)
 
-class ThreeSixtyFiveDays(TotalTimeBadge):
-    def __init__(self):
-        super(ThreeSixtyFiveDays, self).__init__('365 days', 365, units=UNITS.day)
-
 
 ##################################################################
 #
@@ -525,7 +521,7 @@ class ThreeSixtyFiveDays(TotalTimeBadge):
 ##################################################################
 class EarlyBird(CountingUnitsBadge):
     def __init__(self):
-        super(EarlyBird, self).__init__('Early Bird', 10, UNITS.day)
+        super(EarlyBird, self).__init__('Early Bird', 10, UNITS.day, requires_unique_days=True)
 
     def increment(self, activity):
         # FIXME: What if there are 2 runs before 7 on a given day?
@@ -539,7 +535,7 @@ class EarlyBird(CountingUnitsBadge):
 
 class NightOwl(CountingUnitsBadge):
     def __init__(self):
-        super(NightOwl, self).__init__('Night Owl', 10, units=UNITS.day)
+        super(NightOwl, self).__init__('Night Owl', 10, units=UNITS.day, requires_unique_days=True)
 
     def increment(self, activity):
         # FIXME: What if there are 2 runs after 9 on a given day?
@@ -553,7 +549,7 @@ class NightOwl(CountingUnitsBadge):
 
 class LunchHour(CountingUnitsBadge):
     def __init__(self):
-        super(LunchHour, self).__init__('Lunch Hour', 10, units=UNITS.day)
+        super(LunchHour, self).__init__('Lunch Hour', 10, units=UNITS.day, requires_unique_days=True)
 
     def increment(self, activity):
         # FIXME: What if there are 2 runs during lunch on a given day?
@@ -575,7 +571,7 @@ class LunchHour(CountingUnitsBadge):
 class RunStreakBadge(CountingBadge):
     def __init__(self, name, limit, days_between_runs=1, min_distance=None):
         limit = int(math.ceil(float(limit) / float(days_between_runs)))
-        super(RunStreakBadge, self).__init__(name, limit)
+        super(RunStreakBadge, self).__init__(name, limit, requires_unique_days=True)
         self.date_of_next_run = None
         self.days_between_runs = days_between_runs
         self.min_distance = min_distance
@@ -585,7 +581,6 @@ class RunStreakBadge(CountingBadge):
         return dt.replace(hour=0, minute=0, second=0, microsecond=0)
 
     def increment(self, activity):
-
         result = 0
         if self.min_distance is not None and sr_get_distance(activity) < self.min_distance:
             # If there's a minimum distance and this doesn't qualify, just return 0
@@ -658,9 +653,17 @@ class TwoBy365By10k(RunStreakBadge):
     def __init__(self):
         super(TwoBy365By10k, self).__init__('Two by 365 by 10k', 365, 2, 10 * UNITS.kilometer)
 
+class ThreeSixtyFiveDays(CountingBadge):
+    def __init__(self):
+        super(ThreeSixtyFiveDays, self).__init__('365 days', 365, requires_unique_days=True)
+
+    def increment(self, activity):
+        # This only gets invoked for runs on unique days
+        return 1
+
 class ThreeSixtyFiveOf730(Badge):
     def __init__(self):
-        super(ThreeSixtyFiveOf730, self).__init__('365 of 730')
+        super(ThreeSixtyFiveOf730, self).__init__('365 of 730', requires_unique_days=True)
         self.runs = []
 
     def _add_activity(self, activity):
@@ -675,7 +678,7 @@ class ThreeSixtyFiveOf730(Badge):
 
 class AYearInRunning(Badge):
     def __init__(self, name='A year in running'):
-        super(AYearInRunning, self).__init__(name)
+        super(AYearInRunning, self).__init__(name, requires_unique_days=True)
         self.enabled = False
         self.last_available_start_time = None
 
@@ -980,14 +983,12 @@ class ColorPicker(NoActivityBadge):
 ####################################################
 class InItForMonthBadge(CountingUnitsBadge):
     def __init__(self, name, month):
-        super(InItForMonthBadge, self).__init__(name, 10, UNITS.day)
+        super(InItForMonthBadge, self).__init__(name, 10, UNITS.day, requires_unique_days=True)
         self.month = month
         self.datetime_of_lastrun = None
-        self.days = set()
 
     def reset(self, log=True):
         super(InItForMonthBadge, self).reset(log=log)
-        self.days = set()
 
     def increment(self, activity):
         # FIXME: is using start date correct?
@@ -1002,12 +1003,7 @@ class InItForMonthBadge(CountingUnitsBadge):
             self.reset()
         self.datetime_of_lastrun = start_date
 
-        if start_date.day not in self.days:
-            self.days.add(start_date.day)
-            return 1 * UNITS.day
-        else:
-            # Already have a run on this day. Don't double count
-            return 0 * UNITS.day
+        return 1 * UNITS.day
 
 
 class InItForJanuary(InItForMonthBadge):
@@ -1443,11 +1439,10 @@ class FourCorners(Badge):
 ####################################################
 class FullMoonRunner(CountingBadge):
     def __init__(self):
-        super(FullMoonRunner, self).__init__('Full Moon Runner', 10)
+        super(FullMoonRunner, self).__init__('Full Moon Runner', 10, requires_unique_days=True)
         self.full_pct = 99.0
 
     def increment(self, activity):
-        # FIXME: need to track days that were candidates to avoid doubles counting
         pct_ill = sr_get_moon_illumination_pct(activity)
         if pct_ill > self.full_pct:
             if sr_is_between_sunset_and_sunrise(activity):
@@ -1485,7 +1480,7 @@ class ShortestDay(SolsticeBadge):
 
 class Sunriser(CountingBadge):
     def __init__(self):
-        super(Sunriser, self).__init__('Sunriser', 10)
+        super(Sunriser, self).__init__('Sunriser', 10, requires_unique_days=True)
 
     def increment(self, activity):
         if sr_is_sunrise_activity(activity):
@@ -1495,7 +1490,7 @@ class Sunriser(CountingBadge):
 
 class Sunsetter(CountingBadge):
     def __init__(self):
-        super(Sunsetter, self).__init__('Sunsetter', 10)
+        super(Sunsetter, self).__init__('Sunsetter', 10, requires_unique_days=True)
 
     def increment(self, activity):
         if sr_is_sunset_activity(activity):
