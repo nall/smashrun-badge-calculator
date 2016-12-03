@@ -2,7 +2,6 @@
 # vim: ft=python expandtab softtabstop=0 tabstop=4 shiftwidth=4
 
 import argparse
-import datetime
 import dateutil
 import json
 import logging
@@ -11,8 +10,10 @@ import pprint
 import requests
 import sys
 import yaml
-from smashrun.client import Smashrun
+import smashrun.utils as sru
 from dateutil.tz import tzoffset
+from datetime import datetime
+from smashrun.client import Smashrun
 
 
 def smashrun_client(client_id=None, client_secret=None, refresh_token=None, access_token=None):
@@ -77,24 +78,6 @@ def setup(argv):
     return args
 
 
-def sr_start_date(activity):
-    datestring = activity['startDateTimeLocal']
-
-    #
-    # 2016-11-17T07:11:00-08:00
-    #
-    dt = datestring[:-6]
-    tz = datestring[-6:]
-    fmt = '%Y-%m-%dT%H:%M:%S'
-    offset = (int(tz[1:3]) * 60 * 60) + (int(tz[4:6]) * 60)
-    if tz[0] == '-':
-        offset = -offset
-    to_zone = tzoffset(None, offset)
-
-    result = datetime.strptime(dt, fmt)
-    return result.replace(tzinfo=to_zone)
-
-
 def google_tz_offset(dtime, lat, lng, apikey):
     epochtime = (dtime - datetime(1970, 1, 1).replace(tzinfo=dateutil.tz.tzutc())).total_seconds()
 
@@ -119,7 +102,7 @@ def google_tz_offset(dtime, lat, lng, apikey):
 
 
 def fix_start_date(activity, google_apikey):
-    start_date = sr_start_date(activity)
+    start_date = sru.get_start_time(activity)
     offset = google_tz_offset(start_date, activity['startLatitude'], activity['startLongitude'], google_apikey)
     if offset is None:
         raise RuntimeError("Unable to fix activity %s" % (activity['activityId']))
@@ -150,7 +133,7 @@ def main(args):
         ids = []
         # Get the briefs first to filter on start date to avoid pulling so much data
         for a in smashrun.get_activities(since=args.start, style='summary'):
-            start_date = sr_start_date(a)
+            start_date = sru.get_start_time(a)
             if start_date <= args.stop:
                 ids.append(a['activityId'])
         logging.info("Found %d activities in desired time range" % (len(ids)))
@@ -162,7 +145,7 @@ def main(args):
             activities.append(smashrun.get_activity(activity_id))
 
     # Sort activities oldest to newest
-    activities = sorted(activities, key=sr_start_date)
+    activities = sorted(activities, key=sru.get_start_time)
 
     for activity in activities:
         fix_start_date(activity, args.credentials['google_apikey'])

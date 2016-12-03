@@ -2,229 +2,14 @@
 
 import calendar
 import copy
-import dateutil
-import ephem
 import geocoder
 import logging
 import math
-import sys
-from datetime import datetime
 from datetime import timedelta
-from dateutil.tz import tzoffset
-from pint import UnitRegistry
+import utils as sru
 
 
-UNITS = UnitRegistry()
-
-
-def srdate_to_datetime(datestring, utc=False):
-    # 2016-11-17T07:11:00-08:00
-
-    if utc:
-        dt = datestring
-        fmt = '%Y-%m-%dT%H:%M:%S.%f'
-        to_zone = dateutil.tz.tzlocal()
-    else:
-        dt = datestring[:-6]
-        tz = datestring[-6:]
-        fmt = '%Y-%m-%dT%H:%M:%S'
-        offset = (int(tz[1:3]) * 60 * 60) + (int(tz[4:6]) * 60)
-        if tz[0] == '-':
-            offset = -offset
-        to_zone = tzoffset(None, offset)
-
-    result = datetime.strptime(dt, fmt)
-    return result.replace(tzinfo=to_zone)
-
-
-def sr_get_records(activity, key):
-    idx = -1
-    for k in activity['recordingKeys']:
-        idx += 1
-        if activity['recordingKeys'][idx] == key:
-            break
-    assert idx in range(len(activity['recordingKeys'])), "Unable to find valid index in %s for '%s'" % (activity['recordingKeys'], key)
-    return activity['recordingValues'][idx]
-
-
-def sr_get_distance(activity):
-    distance = activity['distance'] * UNITS.kilometer
-    return distance
-
-
-def sr_get_duration(activity):
-    duration = activity['duration'] * UNITS.seconds
-    return duration
-
-
-def sr_get_start_time(activity):
-    start_time = srdate_to_datetime(activity['startDateTimeLocal'])
-    return start_time
-
-
-def sr_get_badge_earned_time(info):
-    earned_time = srdate_to_datetime(info['dateEarnedUTC'], utc=True)
-    return earned_time
-
-
-def sr_get_elevations(activity):
-    elevations = sr_get_records(activity, 'elevation')
-    return elevations
-
-
-def sr_elevation_delta(activity):
-    elevations = sr_get_elevations(activity)
-    min_elevation = sys.maxsize
-    max_elevation = -sys.maxsize
-    for elevation in elevations:
-        min_elevation = min(elevation, min_elevation)
-        max_elevation = max(elevation, max_elevation)
-
-    return (max_elevation - min_elevation) * UNITS.meters
-
-
-def sr_avg_pace(activity, distance_unit=UNITS.mile, time_unit=UNITS.minute, keep_units=False):
-    distance = sr_get_distance(activity)
-    time = sr_get_duration(activity)
-
-    result = time.to(time_unit) / distance.to(distance_unit)
-    if not keep_units:
-        result = result.magnitude
-    return result
-
-
-def sr_get_start_coordinates(activity):
-    return (activity['startLatitude'], activity['startLongitude'])
-
-
-def sr_get_sun_info(activity, rise_or_set, prev=False):
-    if rise_or_set not in ['sunrise', 'sunset']:
-        raise ValueError("rise_or_set must be one of 'sunrise' or 'sunset', but saw '%s'" % (rise_or_set))
-
-    start_date = sr_get_start_time(activity)
-
-    o = ephem.Observer()
-    lat, lon = sr_get_start_coordinates(activity)
-    o.lat = str(lat)
-    o.lon = str(lon)
-    o.elev = sr_get_elevations(activity)[0]
-    o.date = start_date.astimezone(dateutil.tz.tzutc()).strftime('%Y-%m-%d %H:%M:%S')
-    o.pressure = 0       # U.S. Naval Astronomical Almanac value
-    o.horizon = '-0:34'  # U.S. Naval Astronomical Almanac value
-
-    sun = ephem.Sun()
-    result = None
-    if rise_or_set == 'sunrise':
-        if prev:
-            result = o.previous_rising(sun)
-        else:
-            result = o.next_rising(sun)
-    else:
-        if prev:
-            result = o.previous_setting(sun)
-        else:
-            result = o.next_setting(sun)
-
-    return result.datetime().replace(tzinfo=dateutil.tz.tzutc()).astimezone(start_date.tzinfo)
-
-
-def sr_get_moon_illumination_pct(activity):
-    start_date = sr_get_start_time(activity)
-
-    o = ephem.Observer()
-    lat, lon = sr_get_start_coordinates(activity)
-    o.lat = str(lat)
-    o.lon = str(lon)
-    o.elev = sr_get_elevations(activity)[0]
-    o.date = start_date.replace(tzinfo=dateutil.tz.tzutc()).strftime('%Y-%m-%d %H:%M:%S')
-    o.pressure = 0       # U.S. Naval Astronomical Almanac value
-    o.horizon = '-0:34'  # U.S. Naval Astronomical Almanac value
-
-    return ephem.Moon(o).phase
-
-
-def sr_is_between_sunset_and_sunrise(activity):
-    start_date = sr_get_start_time(activity)
-    p_sunset = sr_get_sun_info(activity, 'sunset', prev=True)
-    n_sunrise = sr_get_sun_info(activity, 'sunrise')
-
-    if is_same_day(p_sunset, start_date) and start_date > p_sunset:
-        return True
-    elif is_same_day(n_sunrise, start_date) and start_date < p_sunset:
-        return True
-    else:
-        return False
-
-
-def sr_is_sunrise_activity(activity):
-    start_date = sr_get_start_time(activity)
-    end_date = start_date + timedelta(seconds=sr_get_duration(activity).magnitude)
-    n_sunrise = sr_get_sun_info(activity, 'sunrise')
-
-    # If the next sunrise is on this day
-    if is_same_day(n_sunrise, start_date):
-        if start_date < n_sunrise and end_date > n_sunrise:
-            return True
-    return False
-
-
-def sr_is_sunset_activity(activity):
-    start_date = sr_get_start_time(activity)
-    end_date = start_date + timedelta(seconds=sr_get_duration(activity).magnitude)
-    n_sunset = sr_get_sun_info(activity, 'sunset')
-
-    # If the next sunset is on this day
-    if is_same_day(n_sunset, start_date):
-        if start_date < n_sunset and end_date > n_sunset:
-            return True
-    return False
-
-
-def sr_is_solstice(activity, solstice):
-    if solstice not in ['summer', 'winter']:
-        raise ValueError("solstice must be one of 'summer' or 'winter', but saw '%s'" % (solstice))
-
-    start_date = sr_get_start_time(activity)
-    solstice_date = None
-    if solstice == 'summer':
-        solstice_date = ephem.next_solstice(str(start_date.year))
-    else:
-        solstice_date = ephem.previous_solstice(str(start_date.year + 1))
-
-    # Convert solstice date to same TZ as start_date
-    solstice_date = solstice_date.datetime().replace(tzinfo=dateutil.tz.tzutc()).astimezone(start_date.tzinfo)
-
-    # This is solstice if we're on the same day
-    return is_same_day(solstice_date, start_date)
-
-
-def is_same_day(d1, d2):
-    if d1 is None or d2 is None:
-        return False
-    if d1.year == d2.year and d1.month == d2.month and d1.day == d2.day:
-        return True
-    else:
-        return False
-
-
-def is_different_year(d1, d2):
-    if d1 is None or d2 is None:
-        return True
-    elif d1.year != d2.year:
-        return True
-    else:
-        return False
-
-
-def is_different_month(d1, d2):
-    if d1 is None or d2 is None:
-        return True
-    elif d1.month != d2.month:
-        return True
-    elif d1.year != d2.year:
-        return True
-    else:
-        return False
+UNITS = sru.UNITS
 
 
 class BadgeSet(object):
@@ -379,10 +164,11 @@ class BadgeSet(object):
             self._badges[info['id']].add_user_info(info)
 
     def add_activity(self, activity):
-        start_date = sr_get_start_time(activity)
+        start_date = sru.get_start_time(activity)
         if self.start_date is None or start_date >= self.start_date:
-            logging.debug("Adding activity %s %s" % (sr_get_start_time(activity), activity['activityId']))
+            logging.debug("Adding activity %s %s" % (sru.get_start_time(activity), activity['activityId']))
             for b in self.badges:
+                logging.debug("Checking %s" % (b.name))
                 b._add_activity(activity)
         else:
             logging.debug("Skipping activity %s that occured before %s" % (activity['activityId'], self.start_date))
@@ -406,7 +192,7 @@ class Badge(object):
         if self.acquired:
             return
         if self.requires_unique_days:
-            start_date = sr_get_start_time(activity)
+            start_date = sru.get_start_time(activity)
             activity_day = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
             if activity_day in self.activities:
                 logging.debug("%s: Not adding activity %s on %s (already processed ID=%s on this date)" %
@@ -422,7 +208,7 @@ class Badge(object):
     def acquire(self, activity):
         if self.activityId is None:
             self.activityId = activity['activityId']
-            self.actualEarnedDate = sr_get_start_time(activity)
+            self.actualEarnedDate = sru.get_start_time(activity)
             logging.info("%s: acquired from activity %s on %s" % (self.name, self.activityId, self.actualEarnedDate))
 
     @property
@@ -458,9 +244,9 @@ class CountingBadge(Badge):
         self.count += delta
         if delta:
             description = '[ID=%s START=%s DIST=%smi AVGPACE=%smin/mi ELEV=%s\']' % (activity['activityId'],
-                                                                                     sr_get_start_time(activity).strftime('%Y-%m-%d %H:%M'),
-                                                                                     sr_get_distance(activity).to(UNITS.mile).magnitude,
-                                                                                     sr_avg_pace(activity, distance_unit=UNITS.mile, time_unit=UNITS.minutes),
+                                                                                     sru.get_start_time(activity).strftime('%Y-%m-%d %H:%M'),
+                                                                                     sru.get_distance(activity).to(UNITS.mile).magnitude,
+                                                                                     sru.avg_pace(activity, distance_unit=UNITS.mile, time_unit=UNITS.minutes),
                                                                                      '?')
             logging.debug("%s: %s run qualifies. count now %s" % (self.name, description, self.count))
 
@@ -497,7 +283,7 @@ class TotalTimeBadge(CountingUnitsBadge):
         super(TotalTimeBadge, self).__init__(name, limit, units)
 
     def increment(self, activity):
-        return sr_get_duration(activity)
+        return sru.get_duration(activity)
 
 
 class ChariotsOfFire(TotalTimeBadge):
@@ -536,7 +322,7 @@ class EarlyBird(CountingUnitsBadge):
 
     def increment(self, activity):
         # FIXME: What if there are 2 runs before 7 on a given day?
-        start_date = sr_get_start_time(activity)
+        start_date = sru.get_start_time(activity)
         sevenAM = start_date.replace(hour=7, minute=0, second=0)
 
         if start_date <= sevenAM:
@@ -550,8 +336,8 @@ class NightOwl(CountingUnitsBadge):
 
     def increment(self, activity):
         # FIXME: What if there are 2 runs after 9 on a given day?
-        start_date = sr_get_start_time(activity)
-        end_date = start_date + timedelta(seconds=sr_get_duration(activity).magnitude)
+        start_date = sru.get_start_time(activity)
+        end_date = start_date + timedelta(seconds=sru.get_duration(activity).magnitude)
         ninePM = end_date.replace(hour=21, minute=0, second=0)
 
         if end_date >= ninePM:
@@ -565,7 +351,7 @@ class LunchHour(CountingUnitsBadge):
 
     def increment(self, activity):
         # FIXME: What if there are 2 runs during lunch on a given day?
-        start_date = sr_get_start_time(activity)
+        start_date = sru.get_start_time(activity)
 
         is_weekday = start_date.weekday() in range(0, 6)  # Mon-Fri
         noon = start_date.replace(hour=12, minute=0, second=0)
@@ -595,12 +381,12 @@ class RunStreakBadge(CountingBadge):
 
     def increment(self, activity):
         result = 0
-        if self.min_distance is not None and sr_get_distance(activity) < self.min_distance:
+        if self.min_distance is not None and sru.get_distance(activity) < self.min_distance:
             # If there's a minimum distance and this doesn't qualify, just return 0
             # Don't udpate or reset anything else
             pass
         else:
-            start_date = sr_get_start_time(activity)
+            start_date = sru.get_start_time(activity)
             if self.date_of_next_run is None:
                 self.date_of_next_run = RunStreakBadge.midnight_of_datetime(start_date)
 
@@ -694,7 +480,7 @@ class ThreeSixtyFiveOf730(Badge):
         self.runs = []
 
     def _add_activity(self, activity):
-        start_date = sr_get_start_time(activity)
+        start_date = sru.get_start_time(activity)
         earliest_date = start_date.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=730)
 
         # Filter to runs happening on the last 730 days
@@ -710,19 +496,19 @@ class AYearInRunning(Badge):
         self.last_available_start_time = None
 
     def _add_activity(self, activity):
-        start_date = sr_get_start_time(activity)
+        start_date = sru.get_start_time(activity)
 
         # Jan 1 of the current year
         earliest_date = start_date.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
         last_date = earliest_date.replace(year=earliest_date.year + 1) - timedelta(seconds=1)
 
-        if is_same_day(start_date, earliest_date):
+        if sru.is_same_day(start_date, earliest_date):
             self.enabled = True
 
         if not self.enabled:
             return
 
-        if is_same_day(start_date, last_date):
+        if sru.is_same_day(start_date, last_date):
             self.acquire(activity)
 
         if self.last_available_start_time is not None:
@@ -741,7 +527,7 @@ class LeapYearSweep(AYearInRunning):
         super(LeapYearSweep, self).__init__('Leap year sweep')
 
     def _add_activity(self, activity):
-        start_date = sr_get_start_time(activity)
+        start_date = sru.get_start_time(activity)
         if calendar.isleap(start_date.year):
             super(LeapYearSweep, self)._add_activity(activity)
 
@@ -757,7 +543,7 @@ class TotalMileageBadge(CountingUnitsBadge):
         super(TotalMileageBadge, self).__init__(name, limit, units)
 
     def increment(self, activity):
-        return sr_get_distance(activity)
+        return sru.get_distance(activity)
 
 
 class TenUnderYourBelt(TotalMileageBadge):
@@ -826,12 +612,12 @@ class WeeklyTotalMileage(TotalMileageBadge):
         self.runs = []  # list of (datetime, distance) tuples
 
     def increment(self, activity):
-        start_date = sr_get_start_time(activity)
+        start_date = sru.get_start_time(activity)
         # FIXME: Is it really 7 days like this or is it calendar days?
         earliest_valid_date = start_date - timedelta(days=7)
 
         self.runs = [x for x in self.runs if x[0] >= earliest_valid_date]
-        self.runs.append((start_date, sr_get_distance(activity)))
+        self.runs.append((start_date, sru.get_distance(activity)))
 
         # Always reset since we're going to sum ourselves based on runs
         self.reset()
@@ -859,17 +645,17 @@ class MonthlyTotalMileageBadge(TotalMileageBadge):
         self.datetime_of_lastrun = None
 
     def increment(self, activity):
-        start_date = sr_get_start_time(activity)
+        start_date = sru.get_start_time(activity)
 
         is_new_month = False
-        if is_different_month(self.datetime_of_lastrun, start_date):
+        if sru.is_different_month(self.datetime_of_lastrun, start_date):
             is_new_month = True
 
         if is_new_month:
             self.reset()
 
         self.datetime_of_lastrun = start_date
-        return sr_get_distance(activity)
+        return sru.get_distance(activity)
 
 
 class SolidMonth(MonthlyTotalMileageBadge):
@@ -899,7 +685,7 @@ class SingleMileageBadge(CountingUnitsBadge):
     def increment(self, activity):
         # Single run, so reset each time
         self.reset()
-        return sr_get_distance(activity)
+        return sru.get_distance(activity)
 
 
 class FiveKer(SingleMileageBadge):
@@ -935,9 +721,9 @@ class SingleMileageWithinDuration(CountingUnitsBadge):
         self.duration = duration
 
     def increment(self, activity):
-        if (sr_get_duration(activity)) < self.duration:
+        if (sru.get_duration(activity)) < self.duration:
             self.reset()
-            return sr_get_distance(activity)
+            return sru.get_distance(activity)
         return 0 * UNITS.kilometer
 
 
@@ -994,7 +780,7 @@ class NoActivityBadge(Badge):
 
     def add_user_info(self, info):
         super(NoActivityBadge, self).add_user_info(info)
-        self.actualEarnedDate = sr_get_badge_earned_time(info)
+        self.actualEarnedDate = sru.get_badge_earned_time(info)
 
 
 class Popular(NoActivityBadge):
@@ -1068,14 +854,14 @@ class InItForMonthBadge(CountingUnitsBadge):
 
     def increment(self, activity):
         # FIXME: is using start date correct?
-        start_date = sr_get_start_time(activity)
+        start_date = sru.get_start_time(activity)
 
         # This isn't our month. Ignore
         if start_date.month != self.month:
             return 0 * UNITS.month
 
         # If we've changed years, reset
-        if is_different_year(self.datetime_of_lastrun, start_date):
+        if sru.is_different_year(self.datetime_of_lastrun, start_date):
             self.reset()
         self.datetime_of_lastrun = start_date
 
@@ -1153,14 +939,14 @@ class AvgPaceBadge(CountingBadge):
             self.meets_criteria = lambda x, y: x <= y
 
     def increment(self, activity):
-        start_date = sr_get_start_time(activity)
+        start_date = sru.get_start_time(activity)
 
         # Reset if we've changed months since the last activity
-        if is_different_month(self.datetime_of_lastrun, start_date):
+        if sru.is_different_month(self.datetime_of_lastrun, start_date):
             self.reset()
         self.datetime_of_lastrun = start_date
 
-        if self.meets_criteria(sr_avg_pace(activity), self.pace):
+        if self.meets_criteria(sru.avg_pace(activity), self.pace):
             return 1
         return 0
 
@@ -1192,9 +978,9 @@ class FastAndSlow(Badge):
         self.slow = 0
 
     def _add_activity(self, activity):
-        if sr_avg_pace(activity) < 8:
+        if sru.avg_pace(activity) < 8:
             self.fast += 1
-        if sr_avg_pace(activity) > 10:
+        if sru.avg_pace(activity) > 10:
             self.slow += 1
         if self.fast >= 10 and self.slow >= 10:
             self.acquire(activity)
@@ -1221,11 +1007,11 @@ class StairsBadge(Badge):
         self.cur_month += distance
 
     def _add_activity(self, activity):
-        start_date = sr_get_start_time(activity)
-        distance = sr_get_distance(activity)
+        start_date = sru.get_start_time(activity)
+        distance = sru.get_distance(activity)
 
         # If we walked into a new month, figure out if last month contained a step
-        if is_different_month(self.prev_activity_datetime, start_date):
+        if sru.is_different_month(self.prev_activity_datetime, start_date):
             if self.stepped:
                 self.consecutive_months += 1
                 result = 'STEP #%d' % (self.consecutive_months)
@@ -1333,7 +1119,7 @@ class SingleElevationBadge(Badge):
         self.height = height
 
     def _add_activity(self, activity):
-        delta = sr_elevation_delta(activity)
+        delta = sru.elevation_delta(activity)
         if delta >= self.height:
             self.acquire(activity)
 
@@ -1374,11 +1160,11 @@ class MonthlyElevationBadge(CountingUnitsBadge):
         self.datetime_of_lastrun = None
 
     def increment(self, activity):
-        start_date = sr_get_start_time(activity)
-        if is_different_month(self.datetime_of_lastrun, start_date):
+        start_date = sru.get_start_time(activity)
+        if sru.is_different_month(self.datetime_of_lastrun, start_date):
             self.reset()
 
-        return sr_elevation_delta(activity)
+        return sru.elevation_delta(activity)
 
 
 class TopOfTable(MonthlyElevationBadge):
@@ -1458,8 +1244,8 @@ class AgentBadge(Badge):
         self.max_pace = max_pace
 
     def _add_activity(self, activity):
-        distance = sr_get_distance(activity)
-        pace = sr_avg_pace(activity, keep_units=True)
+        distance = sru.get_distance(activity)
+        pace = sru.avg_pace(activity, keep_units=True)
         if distance >= self.min_distance and pace <= self.max_pace:
             self.acquire(activity)
 
@@ -1491,7 +1277,7 @@ class LocationAwareBadge(CountingBadge):
         self.locations = set()
 
     def increment(self, activity):
-        loc = geocoder.google(list(sr_get_start_coordinates(activity)), method='reverse', key=self.google_apikey)
+        loc = geocoder.google(list(sru.get_start_coordinates(activity)), method='reverse', key=self.google_apikey)
         value = getattr(loc, self.addr_key)
         delta = 0
         if value is not None:
@@ -1527,7 +1313,7 @@ class TopAndBottom(Badge):
 
     def _add_activity(self, activity):
         # FIXME what about latitude 0?!
-        (lat, lng) = sr_get_start_coordinates(activity)
+        (lat, lng) = sru.get_start_coordinates(activity)
         if lat > 0:
             self.top = True
         elif lat < 0:
@@ -1547,7 +1333,7 @@ class FourCorners(Badge):
 
     def _add_activity(self, activity):
         # FIXME what about latitude 0?!
-        (lat, lng) = sr_get_start_coordinates(activity)
+        (lat, lng) = sru.get_start_coordinates(activity)
         if lat > 0 and lng > 0:
             self.nw = True
         elif lat > 0 and lng < 0:
@@ -1572,9 +1358,9 @@ class FullMoonRunner(CountingBadge):
         self.full_pct = 99.0
 
     def increment(self, activity):
-        pct_ill = sr_get_moon_illumination_pct(activity)
+        pct_ill = sru.get_moon_illumination_pct(activity)
         if pct_ill > self.full_pct:
-            if sr_is_between_sunset_and_sunrise(activity):
+            if sru.is_between_sunset_and_sunrise(activity):
                 return 1
         return 0
 
@@ -1587,11 +1373,11 @@ class SolsticeBadge(Badge):
         self.sunset = False
 
     def _add_activity(self, activity):
-        if sr_is_solstice(activity, self.solstice):
-            logging.debug("Solstice[%s]: %s" % (self.solstice, sr_get_start_time(activity)))
-            if sr_is_sunrise_activity(activity):
+        if sru.is_solstice(activity, self.solstice):
+            logging.debug("Solstice[%s]: %s" % (self.solstice, sru.get_start_time(activity)))
+            if sru.is_sunrise_activity(activity):
                 self.sunrise = True
-            if sr_is_sunset_activity(activity):
+            if sru.is_sunset_activity(activity):
                 self.sunset = True
 
             if self.sunrise and self.sunset:
@@ -1613,7 +1399,7 @@ class Sunriser(CountingBadge):
         super(Sunriser, self).__init__('Sunriser', 10, requires_unique_days=True)
 
     def increment(self, activity):
-        if sr_is_sunrise_activity(activity):
+        if sru.is_sunrise_activity(activity):
             return 1
         return 0
 
@@ -1623,7 +1409,7 @@ class Sunsetter(CountingBadge):
         super(Sunsetter, self).__init__('Sunsetter', 10, requires_unique_days=True)
 
     def increment(self, activity):
-        if sr_is_sunset_activity(activity):
+        if sru.is_sunset_activity(activity):
             return 1
         return 0
 
@@ -1639,7 +1425,7 @@ class Corleone(Badge):
         self.datetime_of_lastrun = None
 
     def _add_activity(self, activity):
-        start_date = sr_get_start_time(activity)
+        start_date = sru.get_start_time(activity)
         if self.datetime_of_lastrun is not None:
             if (start_date - self.datetime_of_lastrun).days >= 30:
                 self.acquire(activity)
