@@ -1299,13 +1299,21 @@ class SuperAgent(AgentBadge):
 #
 ####################################################
 class LocationAwareBadge(CountingBadge):
+    GEOCACHE = {}
     def __init__(self, name, limit, addr_key):
         super(LocationAwareBadge, self).__init__(name, limit)
         self.addr_key = addr_key
         self.locations = set()
 
     def increment(self, activity):
-        loc = geocoder.google(list(sru.get_start_coordinates(activity)), method='reverse', key=self.google_apikey)
+        if activity['activityId'] in LocationAwareBadge.GEOCACHE:
+            logging.debug("%s: GEOCACHE_HIT  for %s" % (self.name, activity['activityId']))
+            loc = LocationAwareBadge.GEOCACHE[activity['activityId']]
+        else:
+            logging.debug("%s: GEOCACHE_MISS for %s" % (self.name, activity['activityId']))
+            loc = geocoder.google(list(sru.get_start_coordinates(activity)), method='reverse', key=self.google_apikey)
+            LocationAwareBadge.GEOCACHE[activity['activityId']] = loc
+
         value = getattr(loc, self.addr_key)
         delta = 0
         if value is not None:
