@@ -943,13 +943,13 @@ class SingleMileageWithinDuration(CountingUnitsBadge):
 
 class ArmyRanger(SingleMileageWithinDuration):
     def __init__(self):
-        super(ArmyRanger, self).__init__('Army Ranger', 5 * UNITS.miles, 40 * UNITS.minutes)
+        super(ArmyRanger, self).__init__('Army Ranger', 5, 40 * UNITS.minutes)
 
 
 class FrenchForeignLegion(SingleMileageWithinDuration):
     def __init__(self):
         # Effectively a 12min cooper test
-        super(FrenchForeignLegion, self).__init__('French Foreign Legion', 2800 * UNITS.meters, 12 * UNITS.minutes)
+        super(FrenchForeignLegion, self).__init__('French Foreign Legion', 2800, 12 * UNITS.minutes, units=UNITS.meters)
 
 
 class BeatA9YearOld(SingleMileageWithinDuration):
