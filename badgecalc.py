@@ -72,7 +72,7 @@ def main(args):
     smashrun = smashrun_client(**args.credentials['smashrun'])
 
     # Update user badges
-    badgeset = BadgeSet(args.start_date, args.test_id)
+    badgeset = BadgeSet(args.start_date, args.credentials['google_apikey'], args.test_id)
     for userbadge in smashrun.get_badges():
         badgeset.add_user_info(userbadge)
 

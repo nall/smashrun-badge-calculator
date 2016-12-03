@@ -1,5 +1,6 @@
 # vim: ft=python expandtab softtabstop=0 tabstop=4 shiftwidth=4
 
+import calendar
 import copy
 import dateutil
 import ephem
@@ -221,7 +222,7 @@ def is_different_month(d1, d2):
         return False
 
 class BadgeSet(object):
-    def __init__(self, start_date, only_ids=[]):
+    def __init__(self, start_date, google_apikey=None, only_ids=[]):
         self.start_date = start_date
 
         self._badges = {}
@@ -299,7 +300,7 @@ class BadgeSet(object):
         self._badges[142] = InItForDecember()
         self._badges[143] = ColorPicker()
         self._badges[144] = ThreeSixtyFiveDays()
-        #self._badges[145] = ThreeSixtyFiveOf730()
+        self._badges[145] = ThreeSixtyFiveOf730()
         self._badges[146] = ThreeSixtyFiveOf365()
         self._badges[147] = AYearInRunning()
         self._badges[148] = LeapYearSweep()
@@ -357,6 +358,9 @@ class BadgeSet(object):
             for key in keys_to_del:
                 del self._badges[key]
 
+        for badge in self._badges.values():
+            badge.google_apikey = google_apikey
+
     @property
     def badges(self):
         return self._badges.values()
@@ -379,11 +383,13 @@ class BadgeSet(object):
 
 
 class Badge(object):
-    def __init__(self, name):
+    def __init__(self, name, requires_unique_days=True):
         self.activityId = None
         self.actualEarnedDate = None
         self.info = {}
         self.name = name
+        self.google_apikey = None
+        self.requires_unique_days = requires_unique_days
 
     def add_user_info(self, info):
         self.info = copy.copy(info)
@@ -644,55 +650,63 @@ class TwoBy365By10k(RunStreakBadge):
     def __init__(self):
         super(TwoBy365By10k, self).__init__('Two by 365 by 10k', 365, 2, 10 * UNITS.kilometer)
 
+class ThreeSixtyFiveOf730(Badge):
+    def __init__(self):
+        super(ThreeSixtyFiveOf730, self).__init__('365 of 730')
+        self.runs = []
 
-class AYearInRunning(RunStreakBadge):
-    def __init__(self, name='A year in running', days=365):
-        super(AYearInRunning, self).__init__(name, days)
-        self.enabled = False
-
-    def should_enable(self, activity):
+    def add_activity(self, activity):
         start_date = sr_get_start_time(activity)
-        return start_date.month == 1 and start_date.day == 1
+        earliest_date = start_date.replace(hours=0, minutes=0, seconds=0, microseconds=0) - timedelta(days=730)
 
-    def increment(self, activity):
-        if self.should_enable(activity):
+        # Filter to runs happening on the last 730 days
+        self.runs = [x for x in self.runs if x[0] >= earliest_date]
+        if len(self.runs) >= 365:
+            self.acquire(activity)
+
+
+class AYearInRunning(Badge):
+    def __init__(self, name='A year in running'):
+        super(AYearInRunning, self).__init__(name)
+        self.enabled = False
+        self.last_available_start_time = None
+
+    def add_activity(self, activity):
+        start_date = sr_get_start_time(activity)
+
+        # Jan 1 of the current year
+        earliest_date = start_date.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+        last_date = earliest_date.replace(year=earliest_date.year + 1) - timedelta(seconds=1)
+
+        if is_same_day(start_date, earliest_date):
             self.enabled = True
 
-        if self.enabled:
-            # FIXME: This double counts days -- see RunStreakBadge
-            start_date = sr_get_start_time(activity)
+        if not self.enabled:
+            return
 
-            streak_broken = False
-            if self.datetime_of_lastrun is not None:
-                delta = start_date - self.datetime_of_lastrun
-                streak_broken = delta.days > 1 or (delta.days == 1 and (delta.seconds > 0 or delta.microseconds > 0))
 
-            if streak_broken:
-                self.reset()
+        if is_same_day(start_date, last_date):
+            self.acquire(activity)
 
-            self.datetime_of_lastrun = start_date
+        if self.last_available_start_time is not None:
+            if start_date > self.last_available_start_time:
+                # Streak was broken. Try next year!
+                logging.info("%s: Streak broken on %s by ID=%s" % (self.name, self.last_available_start_time, activity['activityId']))
+                self.enabled = False
+                return
 
-        if self.enabled:
-            return 1
-        else:
-            return 0
-
-    def reset(self, log=True):
-        self.enabled = False
-        self.datetime_of_lastrun = None
-        super(AYearInRunning, self).reset(log)
+        # Do it again tomorrow. Last available run time is tomorrow night at 23:59:59
+        self.last_available_start_time = (start_date + timedelta(days=2)).replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(microseconds=1)
 
 
 class LeapYearSweep(AYearInRunning):
     def __init__(self):
-        super(LeapYearSweep, self).__init__('Leap year sweep', 366)
+        super(LeapYearSweep, self).__init__('Leap year sweep')
 
-    def is_leap_year(self, year):
-        return year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)
-
-    def should_enable(self, activity):
+    def add_activity(self, activity):
         start_date = sr_get_start_time(activity)
-        return self.is_leap_year(start_date.year) and start_date.month == 1 and start_date.day == 1
+        if calendar.isleap(start_date.year):
+            super(LeapYearSweep, self).add_activity(activity)
 
 
 ##################################################################
@@ -1349,7 +1363,7 @@ class LocationAwareBadge(CountingBadge):
         self.locations = set()
 
     def increment(self, activity):
-        loc = geocoder.google(list(sr_get_start_coordinates(activity)), method='reverse')
+        loc = geocoder.google(list(sr_get_start_coordinates(activity)), method='reverse', key=self.google_apikey)
         value = getattr(loc, self.addr_key)
         delta = 0
         if value is not None:
@@ -1426,6 +1440,7 @@ class FullMoonRunner(CountingBadge):
         self.full_pct = 99.0
 
     def increment(self, activity):
+        # FIXME: need to track days that were candidates to avoid doubles counting
         pct_ill = sr_get_moon_illumination_pct(activity)
         if pct_ill > self.full_pct:
             if sr_is_between_sunset_and_sunrise(activity):
