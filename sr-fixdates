@@ -1,0 +1,176 @@
+#!/usr/bin/env python
+# vim: ft=python expandtab softtabstop=0 tabstop=4 shiftwidth=4
+
+import argparse
+import datetime
+import dateutil
+import json
+import logging
+import os
+import pprint
+import requests
+import sys
+import yaml
+from smashrun.client import Smashrun
+from dateutil.tz import tzoffset
+
+
+def smashrun_client(client_id=None, client_secret=None, refresh_token=None, access_token=None):
+    if client_id is None:
+        raise ValueError("Must specify a valid client_id")
+    if client_secret is None:
+        raise ValueError("Must specify a valid client_secret")
+
+    if refresh_token is None:
+        raise RuntimeError("Must supply a token currently")
+    else:
+        client = Smashrun(client_id=client_id, client_secret=client_secret)
+        client.refresh_token(refresh_token=refresh_token)
+        return client
+
+
+def parse_args(argv):
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--credentials_file', required=True,   help='The name of the file holding service credentials')
+    parser.add_argument('--start',                             help='Process runs on or after this date (localtime) Format: YYYY-mm-dd')        # noqa
+    parser.add_argument('--stop',                              help='Process runs before this date (localtime) Format: YYYY-mm-dd')             # noqa
+    parser.add_argument('--input',                             help='Specify the name of a JSON file to read from (avoids querying Smashrun)')  # noqa
+    parser.add_argument('--output',                            help='Specify the name of a JSON file to write')
+    parser.add_argument('--debug',        action='store_true', help='Enable verbose debug')
+    args = parser.parse_args()
+
+    if not os.path.isfile(args.credentials_file):
+        parser.error('No such credentials file: %s' % (args.credentials_file))
+    if args.input:
+        if not os.path.isfile(args.input):
+            parser.error('No such input file: %s' % (args.input))
+        args.input = os.path.abspath(args.input)
+
+    if args.output:
+        args.output = os.path.abspath(args.output)
+
+    with open(args.credentials_file, 'r') as fh:
+        setattr(args, 'credentials', yaml.load(fh))
+        args.credentials.setdefault('smashrun', None)
+
+    if args.start:
+        args.start = datetime.strptime(args.start, '%Y-%m-%d').replace(tzinfo=dateutil.tz.tzlocal())
+    if args.stop:
+        args.stop = datetime.strptime(args.stop, '%Y-%m-%d').replace(tzinfo=dateutil.tz.tzlocal())
+    else:
+        args.stop = datetime.today().replace(tzinfo=dateutil.tz.tzlocal())
+
+    return args
+
+
+def setup(argv):
+    args = parse_args(argv)
+    logging.basicConfig(filename='sr-fixdates.log',
+                        filemode='w',
+                        level=logging.DEBUG if args.debug else logging.INFO)
+    console = logging.StreamHandler()
+    console.setLevel(logging.DEBUG if args.debug else logging.INFO)
+    formatter = logging.Formatter('%(levelname)-8s %(message)s')
+    console.setFormatter(formatter)
+    logging.getLogger('').addHandler(console)
+
+    return args
+
+
+def sr_start_date(activity):
+    datestring = activity['startDateTimeLocal']
+
+    #
+    # 2016-11-17T07:11:00-08:00
+    #
+    dt = datestring[:-6]
+    tz = datestring[-6:]
+    fmt = '%Y-%m-%dT%H:%M:%S'
+    offset = (int(tz[1:3]) * 60 * 60) + (int(tz[4:6]) * 60)
+    if tz[0] == '-':
+        offset = -offset
+    to_zone = tzoffset(None, offset)
+
+    result = datetime.strptime(dt, fmt)
+    return result.replace(tzinfo=to_zone)
+
+
+def google_tz_offset(dtime, lat, lng, apikey):
+    epochtime = (dtime - datetime(1970, 1, 1).replace(tzinfo=dateutil.tz.tzutc())).total_seconds()
+
+    url = 'https://maps.googleapis.com/maps/api/timezone/json?'
+    url += 'location=%s,%s' % (lat, lng)
+    url += '&timestamp=%s' % (epochtime)
+    url += '&key=%s' % (apikey)
+    logging.debug(url)
+
+    r = requests.get(url)
+    offset = None
+    if r.status_code == 200:
+        info = json.loads(r.text)
+        if info['status'] == 'OK':
+            offset = info['dstOffset'] + info['rawOffset']
+        else:
+            logging.error("Unsuccessful response from Google Maps: %s" % (pprint.pformat(info)))
+    else:
+        logging.error("Unable to download %s: %s" % (url, r.text))
+
+    return offset
+
+
+def fix_start_date(activity, google_apikey):
+    start_date = sr_start_date(activity)
+    offset = google_tz_offset(start_date, activity['startLatitude'], activity['startLongitude'], google_apikey)
+    if offset is None:
+        raise RuntimeError("Unable to fix activity %s" % (activity['activityId']))
+    else:
+        tz_offset = tzoffset(None, offset)
+        if tz_offset != start_date.tzinfo:
+            fixed_date = start_date.replace(tzinfo=tz_offset)
+            label = 'Fixed ID=%s' % (activity['activityId'])
+            logging.info('%s PREV: %s' % (label, start_date))
+            logging.info('%s  CUR: %s' % (' ' * len(label), fixed_date))
+            fixed_string = fixed_date.strftime('%Y-%m-%dT%H:%M:%S%z')
+            # Fixup the missing colon
+            fixed_string = fixed_string[:-2] + ':' + fixed_string[-2:]
+            activity['startDateTimeLocal'] = fixed_string
+
+
+def main(args):
+    smashrun = smashrun_client(**args.credentials['smashrun'])
+
+    logging.info("Retriving SmashRuns START: %s" % (args.start))
+    logging.info("                    STOP : %s" % (args.stop))
+
+    activities = []
+    if args.input:
+        with open(args.input, 'r') as fh:
+            activities = json.load(fh)
+    else:
+        ids = []
+        # Get the briefs first to filter on start date to avoid pulling so much data
+        for a in smashrun.get_activities(since=args.start, style='summary'):
+            start_date = sr_start_date(a)
+            if start_date <= args.stop:
+                ids.append(a['activityId'])
+        logging.info("Found %d activities in desired time range" % (len(ids)))
+
+        count = 0
+        for activity_id in ids:
+            count += 1
+            logging.info("Downloading activity %s/%s" % (count, len(ids)))
+            activities.append(smashrun.get_activity(activity_id))
+
+    # Sort activities oldest to newest
+    activities = sorted(activities, key=sr_start_date)
+
+    for activity in activities:
+        fix_start_date(activity, args.credentials['google_apikey'])
+
+    if args.output:
+        logging.info("Saving %s activities to %s" % (len(activities), args.output))
+        with open(args.output, 'w') as fh:
+            json.dump(activities, fh, indent=2)
+
+if __name__ == '__main__':
+    sys.exit(main(setup(sys.argv[1:])))
