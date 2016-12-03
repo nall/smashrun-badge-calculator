@@ -13,7 +13,9 @@ from datetime import timedelta
 from dateutil.tz import tzoffset
 from pint import UnitRegistry
 
+
 UNITS = UnitRegistry()
+
 
 def srdate_to_datetime(datestring, utc=False):
     # 2016-11-17T07:11:00-08:00
@@ -69,6 +71,7 @@ def sr_get_elevations(activity):
     elevations = sr_get_records(activity, 'elevation')
     return elevations
 
+
 def sr_elevation_delta(activity):
     elevations = sr_get_elevations(activity)
     min_elevation = sys.maxsize
@@ -81,7 +84,7 @@ def sr_elevation_delta(activity):
 
 
 def sr_avg_pace(activity, distance_unit=UNITS.mile, time_unit=UNITS.minute, keep_units=False):
-    distance= sr_get_distance(activity)
+    distance = sr_get_distance(activity)
     time = sr_get_duration(activity)
 
     result = time.to(time_unit) / distance.to(distance_unit)
@@ -152,6 +155,7 @@ def sr_is_between_sunset_and_sunrise(activity):
     else:
         return False
 
+
 def sr_is_sunrise_activity(activity):
     start_date = sr_get_start_time(activity)
     end_date = start_date + timedelta(seconds=sr_get_duration(activity).magnitude)
@@ -211,6 +215,7 @@ def is_different_year(d1, d2):
     else:
         return False
 
+
 def is_different_month(d1, d2):
     if d1 is None or d2 is None:
         return True
@@ -220,6 +225,7 @@ def is_different_month(d1, d2):
         return True
     else:
         return False
+
 
 class BadgeSet(object):
     def __init__(self, start_date, google_apikey=None, only_ids=[]):
@@ -306,22 +312,22 @@ class BadgeSet(object):
         self._badges[148] = LeapYearSweep()
         self._badges[149] = SmashrunForLife()
         self._badges[150] = Translator()
-        #self._badges[151] = TBD_UltraUltra100k()
+        # self._badges[151] = TBD_UltraUltra100k()
         self._badges[201] = USofR()
         self._badges[202] = International()
         self._badges[203] = TopAndBottom()
         self._badges[204] = FourCorners()
         self._badges[205] = InternationalSuperRunner()
         self._badges[206] = SpecialAgent()
-        #self._badges[207] = TBD_NCAAFitnessTest()
-        #self._badges[208] = FrenchForeignLegion()
+        # self._badges[207] = TBD_NCAAFitnessTest()
+        # self._badges[208] = FrenchForeignLegion()
         self._badges[209] = SuperAgent()
-        #self._badges[210] = ArmyRanger() ???
-        #self._badges[211] = TBD_FastStart5k()
-        #self._badges[212] = TBD_FastFinish5k()
-        #self._badges[213] = TBD_FastMiddle10k()
-        #self._badges[214] = TBD_FastStartAndFinish5k()
-        #self._badges[215] = TBD_SuperFastStart5k()
+        # self._badges[210] = ArmyRanger() ???
+        # self._badges[211] = TBD_FastStart5k()
+        # self._badges[212] = TBD_FastFinish5k()
+        # self._badges[213] = TBD_FastMiddle10k()
+        # self._badges[214] = TBD_FastStartAndFinish5k()
+        # self._badges[215] = TBD_SuperFastStart5k()
         self._badges[216] = Sunriser()
         self._badges[217] = FullMoonRunner()
         self._badges[218] = Sunsetter()
@@ -403,8 +409,8 @@ class Badge(object):
             start_date = sr_get_start_time(activity)
             activity_day = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
             if activity_day in self.activities:
-                log.debug("%s: Not adding activity %s on %s (already processed ID=%s on this date)" %
-                          (self.name, activity['activityId'], start_date, self.activities[activity_day]))
+                logging.debug("%s: Not adding activity %s on %s (already processed ID=%s on this date)" %
+                              (self.name, activity['activityId'], start_date, self.activities[activity_day]))
                 return
 
         self._add_activity(activity)
@@ -493,21 +499,26 @@ class TotalTimeBadge(CountingUnitsBadge):
     def increment(self, activity):
         return sr_get_duration(activity)
 
+
 class ChariotsOfFire(TotalTimeBadge):
     def __init__(self):
         super(ChariotsOfFire, self).__init__('Chariots of Fire', 124, units=UNITS.minutes)
+
 
 class WentToWork(TotalTimeBadge):
     def __init__(self):
         super(WentToWork, self).__init__('Went to work', 8)
 
+
 class ThatsADay(TotalTimeBadge):
     def __init__(self):
         super(ThatsADay, self).__init__('That\'s a day', 24)
 
+
 class WeekNotWeak(TotalTimeBadge):
     def __init__(self):
         super(WeekNotWeak, self).__init__('Week not weak', 168)
+
 
 class OutlastTheAlamo(TotalTimeBadge):
     def __init__(self):
@@ -547,6 +558,7 @@ class NightOwl(CountingUnitsBadge):
             return 1 * UNITS.day
         return 0 * UNITS.day
 
+
 class LunchHour(CountingUnitsBadge):
     def __init__(self):
         super(LunchHour, self).__init__('Lunch Hour', 10, units=UNITS.day, requires_unique_days=True)
@@ -555,13 +567,14 @@ class LunchHour(CountingUnitsBadge):
         # FIXME: What if there are 2 runs during lunch on a given day?
         start_date = sr_get_start_time(activity)
 
-        is_weekday = start_date.weekday() in range(0, 6) # Mon-Fri
+        is_weekday = start_date.weekday() in range(0, 6)  # Mon-Fri
         noon = start_date.replace(hour=12, minute=0, second=0)
         twoPM = start_date.replace(hour=14, minute=0, second=0)
 
         if is_weekday and start_date >= noon and start_date <= twoPM:
             return 1 * UNITS.day
         return 0 * UNITS.day
+
 
 ##################################################################
 #
@@ -605,53 +618,66 @@ class RunStreakBadge(CountingBadge):
 
         return result
 
+
 class OneMile(RunStreakBadge):
     def __init__(self):
         super(OneMile, self).__init__('One Mile', 1)
+
 
 class FiveForFive(RunStreakBadge):
     def __init__(self):
         super(FiveForFive, self).__init__('5 for 5', 5)
 
+
 class TenForTen(RunStreakBadge):
     def __init__(self):
         super(TenForTen, self).__init__('10 for 10', 10)
+
 
 class TwentyForTwenty(RunStreakBadge):
     def __init__(self):
         super(TwentyForTwenty, self).__init__('20 for 20', 20)
 
+
 class FiftyForFifty(RunStreakBadge):
     def __init__(self):
         super(FiftyForFifty, self).__init__('50 for 50', 50)
+
 
 class Perfect100(RunStreakBadge):
     def __init__(self):
         super(Perfect100, self).__init__('Perfect 100', 100)
 
+
 class ThreeSixtyFiveOf365(RunStreakBadge):
     def __init__(self):
         super(ThreeSixtyFiveOf365, self).__init__('365 of 365', 365)
+
 
 class TwoBy33(RunStreakBadge):
     def __init__(self):
         super(TwoBy33, self).__init__('Two by 33', 33, 2)
 
+
 class TwoBy99(RunStreakBadge):
     def __init__(self):
         super(TwoBy99, self).__init__('Two by 99', 99, 2)
+
 
 class TwoBy33By10k(RunStreakBadge):
     def __init__(self):
         super(TwoBy33By10k, self).__init__('Two by 33 by 10k', 33, 2, 10 * UNITS.kilometer)
 
+
 class TwoBy99By5k(RunStreakBadge):
     def __init__(self):
         super(TwoBy99By5k, self).__init__('Two by 99 by 5k', 99, 2, 5 * UNITS.kilometer)
 
+
 class TwoBy365By10k(RunStreakBadge):
     def __init__(self):
         super(TwoBy365By10k, self).__init__('Two by 365 by 10k', 365, 2, 10 * UNITS.kilometer)
+
 
 class ThreeSixtyFiveDays(CountingBadge):
     def __init__(self):
@@ -660,6 +686,7 @@ class ThreeSixtyFiveDays(CountingBadge):
     def increment(self, activity):
         # This only gets invoked for runs on unique days
         return 1
+
 
 class ThreeSixtyFiveOf730(Badge):
     def __init__(self):
@@ -694,7 +721,6 @@ class AYearInRunning(Badge):
 
         if not self.enabled:
             return
-
 
         if is_same_day(start_date, last_date):
             self.acquire(activity)
@@ -733,25 +759,31 @@ class TotalMileageBadge(CountingUnitsBadge):
     def increment(self, activity):
         return sr_get_distance(activity)
 
+
 class TenUnderYourBelt(TotalMileageBadge):
     def __init__(self):
         super(TenUnderYourBelt, self).__init__('10 under your belt', 10)
+
 
 class TwentyUnderYourBelt(TotalMileageBadge):
     def __init__(self):
         super(TwentyUnderYourBelt, self).__init__('20 under your belt', 20)
 
+
 class FiftyUnderYourBelt(TotalMileageBadge):
     def __init__(self):
         super(FiftyUnderYourBelt, self).__init__('50 under your belt', 50)
+
 
 class ACenturyDown(TotalMileageBadge):
     def __init__(self):
         super(ACenturyDown, self).__init__('A century down', 100)
 
+
 class Monster500(TotalMileageBadge):
     def __init__(self):
         super(Monster500, self).__init__('Monster 500', 500)
+
 
 ##################################################################
 #
@@ -762,17 +794,21 @@ class NYCPhilly(TotalMileageBadge):
     def __init__(self):
         super(NYCPhilly, self).__init__('NYC-Philly', 93)
 
+
 class LondonParis(TotalMileageBadge):
     def __init__(self):
         super(LondonParis, self).__init__('London-Paris', 232)
+
 
 class SydneyMelbourne(TotalMileageBadge):
     def __init__(self):
         super(SydneyMelbourne, self).__init__('Sydney-Melbourne', 561)
 
+
 class NYCChicago(TotalMileageBadge):
     def __init__(self):
         super(NYCChicago, self).__init__('NYC-Chicago', 858)
+
 
 class MiamiToronto(TotalMileageBadge):
     def __init__(self):
@@ -787,7 +823,7 @@ class MiamiToronto(TotalMileageBadge):
 class WeeklyTotalMileage(TotalMileageBadge):
     def __init__(self, name, limit, units=UNITS.mile):
         super(WeeklyTotalMileage, self).__init__(name, limit, units)
-        self.runs = [] # list of (datetime, distance) tuples
+        self.runs = []  # list of (datetime, distance) tuples
 
     def increment(self, activity):
         start_date = sr_get_start_time(activity)
@@ -796,18 +832,21 @@ class WeeklyTotalMileage(TotalMileageBadge):
 
         self.runs = [x for x in self.runs if x[0] >= earliest_valid_date]
         self.runs.append((start_date, sr_get_distance(activity)))
-        
+
         # Always reset since we're going to sum ourselves based on runs
         self.reset()
         return sum([x[1] for x in self.runs])
+
 
 class SolidWeek(WeeklyTotalMileage):
     def __init__(self):
         super(SolidWeek, self).__init__('Solid week', 10)
 
+
 class RockedTheWeek(WeeklyTotalMileage):
     def __init__(self):
         super(RockedTheWeek, self).__init__('Rocked the week', 25)
+
 
 ##################################################################
 #
@@ -832,13 +871,16 @@ class MonthlyTotalMileageBadge(TotalMileageBadge):
         self.datetime_of_lastrun = start_date
         return sr_get_distance(activity)
 
+
 class SolidMonth(MonthlyTotalMileageBadge):
     def __init__(self):
         super(SolidMonth, self).__init__('Solid month', 30)
 
+
 class RockedTheMonth(MonthlyTotalMileageBadge):
     def __init__(self):
         super(RockedTheMonth, self).__init__('Rocked the month', 75)
+
 
 class RunNutMonth(MonthlyTotalMileageBadge):
     def __init__(self):
@@ -859,25 +901,31 @@ class SingleMileageBadge(CountingUnitsBadge):
         self.reset()
         return sr_get_distance(activity)
 
+
 class FiveKer(SingleMileageBadge):
     def __init__(self):
         super(FiveKer, self).__init__('5ker', 5)
+
 
 class TenKer(SingleMileageBadge):
     def __init__(self):
         super(TenKer, self).__init__('10ker', 10)
 
+
 class HalfMarathoner(SingleMileageBadge):
     def __init__(self):
         super(HalfMarathoner, self).__init__('Half Marathoner', 13.1, units=UNITS.mile)
+
 
 class Marathoner(SingleMileageBadge):
     def __init__(self):
         super(Marathoner, self).__init__('Marathoner', 26.2, units=UNITS.mile)
 
+
 class UltraMarathoner(SingleMileageBadge):
     def __init__(self):
         super(UltraMarathoner, self).__init__('Ultra-Marathoner', 50)
+
 
 class SingleMileageWithinDuration(CountingUnitsBadge):
     # Note most badges in this subclass are miles, so we change the default
@@ -892,31 +940,37 @@ class SingleMileageWithinDuration(CountingUnitsBadge):
             return sr_get_distance(activity)
         return 0 * UNITS.kilometer
 
+
 class BeatA9YearOld(SingleMileageWithinDuration):
     def __init__(self):
         # FIXME: The Smashrun says this is <= 2:55, but then says < 2:55. Not sure which
         super(BeatA9YearOld, self).__init__('Beat a 9yr old', 26.2, (2 * UNITS.hour) + (55 * UNITS.minute))
 
+
 class PoundedPalin(SingleMileageWithinDuration):
     def __init__(self):
         super(PoundedPalin, self).__init__('Pounded Palin', 26.2, (3 * UNITS.hour) + (59 * UNITS.minute))
+
 
 class PastDiddy(SingleMileageWithinDuration):
     def __init__(self):
         super(PastDiddy, self).__init__('Past Diddy', 26.2, (4 * UNITS.hour) + (15 * UNITS.minute))
 
+
 class UnderOprah(SingleMileageWithinDuration):
     def __init__(self):
         super(UnderOprah, self).__init__('Under Oprah', 26.2, (4 * UNITS.hour) + (29 * UNITS.minute))
+
 
 class ClearedKate(SingleMileageWithinDuration):
     def __init__(self):
         super(ClearedKate, self).__init__('Cleared Kate', 26.2, (5 * UNITS.hour) + (29 * UNITS.minute))
 
+
 ##################################################################
 #
-# Badges that don't have an associated activity necessarily 
-# May also be a badge that requires knowledge outside of what's 
+# Badges that don't have an associated activity necessarily
+# May also be a badge that requires knowledge outside of what's
 # available via API
 #
 ##################################################################
@@ -936,45 +990,56 @@ class Popular(NoActivityBadge):
     def __init__(self):
         super(Popular, self).__init__('Popular')
 
+
 class OCD(NoActivityBadge):
     def __init__(self):
         super(OCD, self).__init__('OCD')
+
 
 class GuineaPig(NoActivityBadge):
     def __init__(self):
         super(GuineaPig, self).__init__('Guinea pig')
 
+
 class BirthdayRun(NoActivityBadge):
     def __init__(self):
         super(BirthdayRun, self).__init__('Birthday Run')
+
 
 class BroughtABuddy(NoActivityBadge):
     def __init__(self):
         super(BroughtABuddy, self).__init__('Brought a buddy')
 
+
 class GotFriends(NoActivityBadge):
     def __init__(self):
         super(GotFriends, self).__init__('Got friends')
+
 
 class SocialSeven(NoActivityBadge):
     def __init__(self):
         super(SocialSeven, self).__init__('Social seven')
 
+
 class SharesWell(NoActivityBadge):
     def __init__(self):
         super(SharesWell, self).__init__('Shares well')
+
 
 class PackLeader(NoActivityBadge):
     def __init__(self):
         super(PackLeader, self).__init__('Pack Leader')
 
+
 class Translator(NoActivityBadge):
     def __init__(self):
         super(Translator, self).__init__('Translator')
 
+
 class ColorPicker(NoActivityBadge):
     def __init__(self):
         super(ColorPicker, self).__init__('Color Picker')
+
 
 ####################################################
 #
@@ -1010,45 +1075,56 @@ class InItForJanuary(InItForMonthBadge):
     def __init__(self):
         super(InItForJanuary, self).__init__('In it for January', 1)
 
+
 class InItForFebruary(InItForMonthBadge):
     def __init__(self):
         super(InItForFebruary, self).__init__('In it for February', 2)
+
 
 class InItForMarch(InItForMonthBadge):
     def __init__(self):
         super(InItForMarch, self).__init__('In it for March', 3)
 
+
 class InItForApril(InItForMonthBadge):
     def __init__(self):
         super(InItForApril, self).__init__('In it for April', 4)
+
 
 class InItForMay(InItForMonthBadge):
     def __init__(self):
         super(InItForMay, self).__init__('In it for May', 5)
 
+
 class InItForJune(InItForMonthBadge):
     def __init__(self):
         super(InItForJune, self).__init__('In it for June', 6)
+
 
 class InItForJuly(InItForMonthBadge):
     def __init__(self):
         super(InItForJuly, self).__init__('In it for July', 7)
 
+
 class InItForAugust(InItForMonthBadge):
     def __init__(self):
         super(InItForAugust, self).__init__('In it for August', 8)
+
 
 class InItForSeptember(InItForMonthBadge):
     def __init__(self):
         super(InItForSeptember, self).__init__('In it for September', 9)
 
+
 class InItForOctober(InItForMonthBadge):
     def __init__(self):
         super(InItForOctober, self).__init__('In it for October', 10)
 
+
 class InItForNovember(InItForMonthBadge):
     def __init__(self):
         super(InItForNovember, self).__init__('In it for November', 11)
+
 
 class InItForDecember(InItForMonthBadge):
     def __init__(self):
@@ -1077,21 +1153,26 @@ class AvgPaceBadge(CountingBadge):
             return 1
         return 0
 
+
 class EasyRunner(AvgPaceBadge):
     def __init__(self):
         super(EasyRunner, self).__init__('Easy runner', 10, slower_ok=True)
+
 
 class ChillRunner(AvgPaceBadge):
     def __init__(self):
         super(ChillRunner, self).__init__('Chill runner', 12, slower_ok=True)
 
+
 class RoadRunner(AvgPaceBadge):
     def __init__(self):
         super(RoadRunner, self).__init__('Roadrunner', 8, slower_ok=False)
 
+
 class Mercury(AvgPaceBadge):
     def __init__(self):
         super(Mercury, self).__init__('Mercury', 7, slower_ok=False)
+
 
 class FastAndSlow(Badge):
     def __init__(self):
@@ -1106,6 +1187,7 @@ class FastAndSlow(Badge):
             self.slow += 1
         if self.fast >= 10 and self.slow >= 10:
             self.acquire(activity)
+
 
 ####################################################
 #
@@ -1142,7 +1224,8 @@ class StairsBadge(Badge):
                 self.consecutive_months = 0
 
             if self.prev_activity_datetime is not None:
-                logging.debug("%s: Distance for %s/%s: %s [%s]" % (self.name, self.prev_activity_datetime.month, self.prev_activity_datetime.year, self.cur_month, result))
+                logging.debug("%s: Distance for %s/%s: %s [%s]" %
+                              (self.name, self.prev_activity_datetime.month, self.prev_activity_datetime.year, self.cur_month, result))
             self.stepped = False
             self.prev_month = self.cur_month
             self.cur_month = 0 * UNITS.miles
@@ -1165,26 +1248,30 @@ class StairsBadge(Badge):
             self.acquire(self.step_activity)
 
 
-
 class Stairs(StairsBadge):
     def __init__(self):
         super(Stairs, self).__init__('Stairs', 4, None)
+
 
 class SteepStairs(StairsBadge):
     def __init__(self):
         super(SteepStairs, self).__init__('Steep stairs', 4, 5 * UNITS.miles)
 
+
 class LongStairs(StairsBadge):
     def __init__(self):
         super(LongStairs, self).__init__('Long stairs', 6, None)
+
 
 class LongSteepStairs(StairsBadge):
     def __init__(self):
         super(LongSteepStairs, self).__init__('Long/Steep stairs', 6, 5 * UNITS.miles)
 
+
 class ToweringStairs(StairsBadge):
     def __init__(self):
         super(ToweringStairs, self).__init__('Towering stairs', 6, 10 * UNITS.miles)
+
 
 ####################################################
 #
@@ -1198,25 +1285,31 @@ class FurtherBadge(StairsBadge):
     def update_cur_month_value(self, distance):
         self.cur_month = max(self.cur_month, distance)
 
+
 class FourFurther(FurtherBadge):
     def __init__(self):
         super(FourFurther, self).__init__('Four further', 4, None)
+
 
 class FourFarFurther(FurtherBadge):
     def __init__(self):
         super(FourFarFurther, self).__init__('Four far further', 4, 2 * UNITS.kilometer)
 
+
 class SixFurther(FurtherBadge):
     def __init__(self):
         super(SixFurther, self).__init__('Six further', 6, None)
+
 
 class SixFarFurther(FurtherBadge):
     def __init__(self):
         super(SixFarFurther, self).__init__('Six far further', 6, 2 * UNITS.kilometer)
 
+
 class FurtherToFarther(FurtherBadge):
     def __init__(self):
         super(FurtherToFarther, self).__init__('Further to farther', 6, 5 * UNITS.kilometer)
+
 
 ####################################################
 #
@@ -1233,21 +1326,26 @@ class SingleElevationBadge(Badge):
         if delta >= self.height:
             self.acquire(activity)
 
+
 class ToweredPisa(SingleElevationBadge):
     def __init__(self):
         super(ToweredPisa, self).__init__('Towered Pisa', 56 * UNITS.meters)
+
 
 class TopOfWashington(SingleElevationBadge):
     def __init__(self):
         super(TopOfWashington, self).__init__('Top of Washington', 169 * UNITS.meters)
 
+
 class OverTheEiffel(SingleElevationBadge):
     def __init__(self):
         super(OverTheEiffel, self).__init__('Over the Eiffel', 301 * UNITS.meters)
 
+
 class AboveTheBurj(SingleElevationBadge):
     def __init__(self):
         super(AboveTheBurj, self).__init__('Above the Burj', 830 * UNITS.meters)
+
 
 class ToPikesPeak(SingleElevationBadge):
     def __init__(self):
@@ -1271,25 +1369,31 @@ class MonthlyElevationBadge(CountingUnitsBadge):
 
         return sr_elevation_delta(activity)
 
+
 class TopOfTable(MonthlyElevationBadge):
     def __init__(self):
         super(TopOfTable, self).__init__('Top of Table', 1085)
+
 
 class ClimbedHalfDome(MonthlyElevationBadge):
     def __init__(self):
         super(ClimbedHalfDome, self).__init__('Climbed Half Dome', 2694)
 
+
 class ReachedFitzRoy(MonthlyElevationBadge):
     def __init__(self):
         super(ReachedFitzRoy, self).__init__('Reached Fitz Roy', 3359)
+
 
 class MatterhornMaster(MonthlyElevationBadge):
     def __init__(self):
         super(MatterhornMaster, self).__init__('Matterhorn master', 4478)
 
+
 class ConqueredEverest(MonthlyElevationBadge):
     def __init__(self):
         super(ConqueredEverest, self).__init__('Conquered Everest', 8848)
+
 
 ####################################################
 #
@@ -1305,25 +1409,31 @@ class PaceVariabilityBadge(CountingBadge):
         assert False, "Waiting for API to include this info"
         return 0
 
+
 class ShortAndSteady(PaceVariabilityBadge):
     def __init__(self):
         super(ShortAndSteady, self).__init__('Short and steady', 5 * UNITS.kilometer, 10, .05)
+
 
 class LongAndSteady(PaceVariabilityBadge):
     def __init__(self):
         super(LongAndSteady, self).__init__('Long and steady', 10 * UNITS.kilometer, 10, .05)
 
+
 class ShortAndSolid(PaceVariabilityBadge):
     def __init__(self):
         super(ShortAndSolid, self).__init__('Short and solid', 5 * UNITS.kilometer, 10, .04)
+
 
 class LongAndSolid(PaceVariabilityBadge):
     def __init__(self):
         super(LongAndSolid, self).__init__('Long and solid', 10 * UNITS.kilometer, 10, .04)
 
+
 class LongAndRockSolid(PaceVariabilityBadge):
     def __init__(self):
         super(LongAndRockSolid, self).__init__('Long and rock solid', 10 * UNITS.kilometer, 10, .03)
+
 
 ####################################################
 #
@@ -1342,17 +1452,20 @@ class AgentBadge(Badge):
         if distance >= self.min_distance and pace <= self.max_pace:
             self.acquire(activity)
 
+
 class SpecialAgent(AgentBadge):
     def __init__(self):
         super(SpecialAgent, self).__init__('Special Agent',
                                            1.5 * UNITS.miles,
                                            ((9 * UNITS.minutes) + (13 * UNITS.seconds)) / (1 * UNITS.miles))
 
+
 class SuperAgent(AgentBadge):
     def __init__(self):
         super(SuperAgent, self).__init__('Super Agent',
                                          1.5 * UNITS.miles,
                                          ((6 * UNITS.minutes) + (31 * UNITS.seconds)) / (1 * UNITS.miles))
+
 
 ####################################################
 #
@@ -1381,15 +1494,18 @@ class USofR(LocationAwareBadge):
         super(USofR, self).__init__('U.S. of R.', 5, 'state')
         self.states = set()
 
+
 class International(LocationAwareBadge):
     def __init__(self):
         super(International, self).__init__('International', 2, 'country')
         self.states = set()
 
+
 class InternationalSuperRunner(LocationAwareBadge):
     def __init__(self):
         super(InternationalSuperRunner, self).__init__('International Super Runner', 10, 'country')
         self.states = set()
+
 
 class TopAndBottom(Badge):
     def __init__(self):
@@ -1407,6 +1523,7 @@ class TopAndBottom(Badge):
 
         if self.top and self.bottom:
             self.acquire(activity)
+
 
 class FourCorners(Badge):
     def __init__(self):
@@ -1468,6 +1585,7 @@ class SolsticeBadge(Badge):
             if self.sunrise and self.sunset:
                 self.acquire(activity)
 
+
 class LongestDay(SolsticeBadge):
     def __init__(self):
         super(LongestDay, self).__init__('Longest Day', 'summer')
@@ -1516,13 +1634,14 @@ class Corleone(Badge):
 
         self.datetime_of_lastrun = start_date
 
+
 class Veteran(NoActivityBadge):
     # http://smashrun.com/steve.tant/badges-to-go/4
     def __init__(self):
         super(Veteran, self).__init__('Veteran')
 
+
 class SmashrunForLife(NoActivityBadge):
     # http://smashrun.com/steve.tant/badges-to-go/4
     def __init__(self):
         super(SmashrunForLife, self).__init__('Smashrun for life')
-
