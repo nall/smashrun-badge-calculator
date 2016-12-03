@@ -320,9 +320,9 @@ class BadgeSet(object):
         self._badges[205] = InternationalSuperRunner()
         self._badges[206] = SpecialAgent()
         # self._badges[207] = TBD_NCAAFitnessTest()
-        # self._badges[208] = FrenchForeignLegion()
+        self._badges[208] = FrenchForeignLegion()
         self._badges[209] = SuperAgent()
-        # self._badges[210] = ArmyRanger() ???
+        self._badges[210] = ArmyRanger()
         # self._badges[211] = TBD_FastStart5k()
         # self._badges[212] = TBD_FastFinish5k()
         # self._badges[213] = TBD_FastMiddle10k()
@@ -941,6 +941,17 @@ class SingleMileageWithinDuration(CountingUnitsBadge):
         return 0 * UNITS.kilometer
 
 
+class ArmyRanger(SingleMileageWithinDuration):
+    def __init__(self):
+        super(ArmyRanger, self).__init__('Army Ranger', 5 * UNITS.miles, 40 * UNITS.minutes)
+
+
+class FrenchForeignLegion(SingleMileageWithinDuration):
+    def __init__(self):
+        # Effectively a 12min cooper test
+        super(FrenchForeignLegion, self).__init__('French Foreign Legion', 2800 * UNITS.meters, 12 * UNITS.minutes)
+
+
 class BeatA9YearOld(SingleMileageWithinDuration):
     def __init__(self):
         # FIXME: The Smashrun says this is <= 2:55, but then says < 2:55. Not sure which
@@ -1461,6 +1472,7 @@ class SpecialAgent(AgentBadge):
 
 
 class SuperAgent(AgentBadge):
+    # FIXME: These are hardcoded. Should they come from the FBI percentile tables
     def __init__(self):
         super(SuperAgent, self).__init__('Super Agent',
                                          1.5 * UNITS.miles,
