@@ -377,7 +377,7 @@ class BadgeSet(object):
         if self.start_date is None or start_date >= self.start_date:
             logging.debug("Adding activity %s %s" % (sr_get_start_time(activity), activity['activityId']))
             for b in self.badges:
-                b.add_activity(activity)
+                b._add_activity(activity)
         else:
             logging.debug("Skipping activity %s that occured before %s" % (activity['activityId'], self.start_date))
 
@@ -390,19 +390,30 @@ class Badge(object):
         self.name = name
         self.google_apikey = None
         self.requires_unique_days = requires_unique_days
+        self.activities = {}
 
     def add_user_info(self, info):
         self.info = copy.copy(info)
 
-    # activity is a hash containing the activity info as received from Smashrun
     def add_activity(self, activity):
-        raise NotImplementedError("subclasses must implement add_activity")
-
-    def acquire(self, activity):
         # Only allow badges to be acquired once -- Smashrun doesn't have levels (YET!)
         if self.acquired:
             return
+        if self.requires_unique_days:
+            start_date = sr_get_start_time(activity)
+            activity_day = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
+            if activity_day in self.activities:
+                log.debug("%s: Not adding activity %s on %s (already processed ID=%s on this date)" %
+                          (self.name, activity['activityId'], start_date, self.activities[activity_day]))
+                return
 
+        self._add_activity(activity)
+
+    # activity is a hash containing the activity info as received from Smashrun
+    def _add_activity(self, activity):
+        raise NotImplementedError("subclasses must implement _add_activity")
+
+    def acquire(self, activity):
         if self.activityId is None:
             self.activityId = activity['activityId']
             self.actualEarnedDate = sr_get_start_time(activity)
@@ -435,10 +446,7 @@ class CountingBadge(Badge):
         self._reset = reset
         self.reset(log=False)
 
-    def add_activity(self, activity):
-        if self.acquired:
-            return
-
+    def _add_activity(self, activity):
         # Do this in two steps. increment() may invoke reset()
         delta = self.increment(activity)
         self.count += delta
@@ -449,9 +457,9 @@ class CountingBadge(Badge):
                                                                                      sr_avg_pace(activity, distance_unit=UNITS.mile, time_unit=UNITS.minutes),
                                                                                      '?')
             logging.debug("%s: %s run qualifies. count now %s" % (self.name, description, self.count))
-        if not self.acquired:
-            if self.count >= self.limit:
-                self.acquire(activity)
+
+        if self.count >= self.limit:
+            self.acquire(activity)
 
     def reset(self, log=True):
         self.count = self._reset
@@ -655,9 +663,9 @@ class ThreeSixtyFiveOf730(Badge):
         super(ThreeSixtyFiveOf730, self).__init__('365 of 730')
         self.runs = []
 
-    def add_activity(self, activity):
+    def _add_activity(self, activity):
         start_date = sr_get_start_time(activity)
-        earliest_date = start_date.replace(hours=0, minutes=0, seconds=0, microseconds=0) - timedelta(days=730)
+        earliest_date = start_date.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=730)
 
         # Filter to runs happening on the last 730 days
         self.runs = [x for x in self.runs if x[0] >= earliest_date]
@@ -671,7 +679,7 @@ class AYearInRunning(Badge):
         self.enabled = False
         self.last_available_start_time = None
 
-    def add_activity(self, activity):
+    def _add_activity(self, activity):
         start_date = sr_get_start_time(activity)
 
         # Jan 1 of the current year
@@ -703,10 +711,10 @@ class LeapYearSweep(AYearInRunning):
     def __init__(self):
         super(LeapYearSweep, self).__init__('Leap year sweep')
 
-    def add_activity(self, activity):
+    def _add_activity(self, activity):
         start_date = sr_get_start_time(activity)
         if calendar.isleap(start_date.year):
-            super(LeapYearSweep, self).add_activity(activity)
+            super(LeapYearSweep, self)._add_activity(activity)
 
 
 ##################################################################
@@ -913,7 +921,7 @@ class NoActivityBadge(Badge):
     def __init__(self, name):
         super(NoActivityBadge, self).__init__(name)
 
-    def add_activity(self, activity):
+    def _add_activity(self, activity):
         pass
 
     def add_user_info(self, info):
@@ -1095,7 +1103,7 @@ class FastAndSlow(Badge):
         self.fast = 0
         self.slow = 0
 
-    def add_activity(self, activity):
+    def _add_activity(self, activity):
         if sr_avg_pace(activity) < 8:
             self.fast += 1
         if sr_avg_pace(activity) > 10:
@@ -1123,7 +1131,7 @@ class StairsBadge(Badge):
     def update_cur_month_value(self, distance):
         self.cur_month += distance
 
-    def add_activity(self, activity):
+    def _add_activity(self, activity):
         start_date = sr_get_start_time(activity)
         distance = sr_get_distance(activity)
 
@@ -1157,9 +1165,8 @@ class StairsBadge(Badge):
                     self.stepped = True
                     self.step_activity = activity
 
-        if not self.acquired:
-            if self.consecutive_months >= self.min_months:
-                self.acquire(self.step_activity)
+        if self.consecutive_months >= self.min_months:
+            self.acquire(self.step_activity)
 
 
 
@@ -1225,7 +1232,7 @@ class SingleElevationBadge(Badge):
         super(SingleElevationBadge, self).__init__(name)
         self.height = height
 
-    def add_activity(self, activity):
+    def _add_activity(self, activity):
         delta = sr_elevation_delta(activity)
         if delta >= self.height:
             self.acquire(activity)
@@ -1333,7 +1340,7 @@ class AgentBadge(Badge):
         self.min_distance = min_distance
         self.max_pace = max_pace
 
-    def add_activity(self, activity):
+    def _add_activity(self, activity):
         distance = sr_get_distance(activity)
         pace = sr_avg_pace(activity, keep_units=True)
         if distance >= self.min_distance and pace <= self.max_pace:
@@ -1394,7 +1401,7 @@ class TopAndBottom(Badge):
         self.top = False
         self.bottom = False
 
-    def add_activity(self, activity):
+    def _add_activity(self, activity):
         # FIXME what about latitude 0?!
         (lat, lng) = sr_get_start_coordinates(activity)
         if lat > 0:
@@ -1413,7 +1420,7 @@ class FourCorners(Badge):
         self.sw = False
         self.se = False
 
-    def add_activity(self, activity):
+    def _add_activity(self, activity):
         # FIXME what about latitude 0?!
         (lat, lng) = sr_get_start_coordinates(activity)
         if lat > 0 and lng > 0:
@@ -1455,7 +1462,7 @@ class SolsticeBadge(Badge):
         self.sunrise = False
         self.sunset = False
 
-    def add_activity(self, activity):
+    def _add_activity(self, activity):
         if sr_is_solstice(activity, self.solstice):
             logging.debug("Solstice[%s]: %s" % (self.solstice, sr_get_start_time(activity)))
             if sr_is_sunrise_activity(activity):
@@ -1506,7 +1513,7 @@ class Corleone(Badge):
         super(Corleone, self).__init__('Corleone')
         self.datetime_of_lastrun = None
 
-    def add_activity(self, activity):
+    def _add_activity(self, activity):
         start_date = sr_get_start_time(activity)
         if self.datetime_of_lastrun is not None:
             if (start_date - self.datetime_of_lastrun).days >= 30:
