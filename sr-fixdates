@@ -160,7 +160,7 @@ def main(args):
     else:
         ids = []
         # Get the briefs first to filter on start date to avoid pulling so much data
-        for a in smashrun.get_activities(since=args.start, style='summary'):
+        for a in smashrun.get_activities(since=args.start, style='briefs'):
             start_date = sru.get_start_time(a)
             if start_date <= args.stop:
                 ids.append(a['activityId'])
