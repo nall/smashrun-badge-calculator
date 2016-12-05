@@ -65,7 +65,11 @@ def get_records(activity, key):
         idx += 1
         if activity['recordingKeys'][idx] == key:
             break
-    assert idx in range(len(activity['recordingKeys'])), "Unable to find valid index in %s for '%s'" % (activity['recordingKeys'], key)
+
+    if idx not in range(len(activity['recordingKeys'])):
+        logging.warning("Unable to find valid index in %s for '%s'" % (activity['recordingKeys'], key))
+        return None
+
     return activity['recordingValues'][idx]
 
 
@@ -117,6 +121,19 @@ def avg_pace(activity, distance_unit=UNITS.mile, time_unit=UNITS.minute, keep_un
 
 def get_start_coordinates(activity):
     return (activity['startLatitude'], activity['startLongitude'])
+
+
+def get_coordinates(activity):
+    lats = get_records(activity, 'latitude')
+    lons = get_records(activity, 'longitude')
+    assert len(lats) == len(lons), "Found mismatch between length of latitudes (%d) and longitudes (%d) for ID=%s" % (len(lats), len(lons), activity['activityId'])  # noqa
+    coordinates = []
+    for i in range(len(lats)):
+        if lats[i] == -1 and lons[i] == -1:
+            # This is a null data point. Ignore it
+            continue
+        coordinates.append((lats[i], lons[i]))
+    return coordinates
 
 
 def get_sun_info(activity, rise_or_set, prev=False):
