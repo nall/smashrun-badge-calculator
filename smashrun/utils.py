@@ -59,7 +59,17 @@ def srdate_to_datetime(datestring, utc=False):
     return result.replace(tzinfo=to_zone)
 
 
+def assert_activity_field(activity, key, required_query_type):
+    if key not in activity:
+        raise RuntimeError("Requested value '%s' not in activity ID=%s. Make sure you request at least %s fields" %
+                           (key, activity['activityId'], required_query_type))
+
 def get_records(activity, key):
+    assert_activity_field(activity, 'recordingKeys', 'detailed')
+
+    if 'recordingKeys' not in activity:
+        raise RuntimeError("Requested detailed date for %s, but no details present in activity %s" % (key, activity['activityId']))
+
     idx = -1
     for k in activity['recordingKeys']:
         idx += 1
@@ -74,16 +84,19 @@ def get_records(activity, key):
 
 
 def get_distance(activity):
+    assert_activity_field(activity, 'distance', 'briefs')
     distance = activity['distance'] * UNITS.kilometer
     return distance
 
 
 def get_duration(activity):
+    assert_activity_field(activity, 'duration', 'briefs')
     duration = activity['duration'] * UNITS.seconds
     return duration
 
 
 def get_start_time(activity):
+    assert_activity_field(activity, 'startDateTimeLocal', 'briefs')
     start_time = srdate_to_datetime(activity['startDateTimeLocal'])
     return start_time
 
@@ -98,15 +111,10 @@ def get_elevations(activity):
     return elevations
 
 
-def elevation_delta(activity):
-    elevations = get_elevations(activity)
-    min_elevation = sys.maxsize
-    max_elevation = -sys.maxsize
-    for elevation in elevations:
-        min_elevation = min(elevation, min_elevation)
-        max_elevation = max(elevation, max_elevation)
-
-    return (max_elevation - min_elevation) * UNITS.meters
+def elevation_gain(activity):
+    assert_activity_field(activity, 'isTreadmill', 'extended')
+    e = 0 if activity['isTreadmill'] else activity['elevationGain']
+    return e * UNITS.meters
 
 
 def avg_pace(activity, distance_unit=UNITS.mile, time_unit=UNITS.minute, keep_units=False):
@@ -119,7 +127,13 @@ def avg_pace(activity, distance_unit=UNITS.mile, time_unit=UNITS.minute, keep_un
     return result
 
 
+def get_pace_variability(activity):
+    assert_activity_field(activity, 'speedVariability', 'extended')
+    return activity['speedVariability']
+
+
 def get_start_coordinates(activity):
+    assert_activity_field(activity, 'startLatitude', 'summary')
     return (activity['startLatitude'], activity['startLongitude'])
 
 
@@ -136,87 +150,25 @@ def get_coordinates(activity):
     return coordinates
 
 
-def get_sun_info(activity, rise_or_set, prev=False):
-    if rise_or_set not in ['sunrise', 'sunset']:
-        raise ValueError("rise_or_set must be one of 'sunrise' or 'sunset', but saw '%s'" % (rise_or_set))
+def get_location(activity, key):
+    assert_activity_field(activity, key, 'extended')
+    return activity[key]
 
-    start_date = get_start_time(activity)
 
-    o = ephem.Observer()
-    lat, lon = get_start_coordinates(activity)
-    o.lat = str(lat)
-    o.lon = str(lon)
-    o.elev = get_elevations(activity)[0]
-    o.date = start_date.astimezone(dateutil.tz.tzutc()).strftime('%Y-%m-%d %H:%M:%S')
-    o.pressure = 0       # U.S. Naval Astronomical Almanac value
-    o.horizon = '-0:34'  # U.S. Naval Astronomical Almanac value
+def get_sunrise(activity):
+    assert_activity_field(activity, 'sunriseLocal', 'extended')
+    return srdate_to_datetime(activity['sunriseLocal'])
 
-    sun = ephem.Sun()
-    result = None
-    if rise_or_set == 'sunrise':
-        if prev:
-            result = o.previous_rising(sun)
-        else:
-            result = o.next_rising(sun)
-    else:
-        if prev:
-            result = o.previous_setting(sun)
-        else:
-            result = o.next_setting(sun)
 
-    return result.datetime().replace(tzinfo=dateutil.tz.tzutc()).astimezone(start_date.tzinfo)
+def get_sunset(activity):
+    assert_activity_field(activity, 'sunsetLocal', 'extended')
+    return srdate_to_datetime(activity['sunsetLocal'])
 
 
 def get_moon_illumination_pct(activity):
-    start_date = get_start_time(activity)
-
-    o = ephem.Observer()
-    lat, lon = get_start_coordinates(activity)
-    o.lat = str(lat)
-    o.lon = str(lon)
-    o.elev = get_elevations(activity)[0]
-    o.date = start_date.replace(tzinfo=dateutil.tz.tzutc()).strftime('%Y-%m-%d %H:%M:%S')
-    o.pressure = 0       # U.S. Naval Astronomical Almanac value
-    o.horizon = '-0:34'  # U.S. Naval Astronomical Almanac value
-
-    return ephem.Moon(o).phase
-
-
-def is_between_sunset_and_sunrise(activity):
-    start_date = get_start_time(activity)
-    p_sunset = get_sun_info(activity, 'sunset', prev=True)
-    n_sunrise = get_sun_info(activity, 'sunrise')
-
-    if is_same_day(p_sunset, start_date) and start_date > p_sunset:
-        return True
-    elif is_same_day(n_sunrise, start_date) and start_date < p_sunset:
-        return True
-    else:
-        return False
-
-
-def is_sunrise_activity(activity):
-    start_date = get_start_time(activity)
-    end_date = start_date + timedelta(seconds=get_duration(activity).magnitude)
-    n_sunrise = get_sun_info(activity, 'sunrise')
-
-    # If the next sunrise is on this day
-    if is_same_day(n_sunrise, start_date):
-        if start_date < n_sunrise and end_date > n_sunrise:
-            return True
-    return False
-
-
-def is_sunset_activity(activity):
-    start_date = get_start_time(activity)
-    end_date = start_date + timedelta(seconds=get_duration(activity).magnitude)
-    n_sunset = get_sun_info(activity, 'sunset')
-
-    # If the next sunset is on this day
-    if is_same_day(n_sunset, start_date):
-        if start_date < n_sunset and end_date > n_sunset:
-            return True
-    return False
+    assert_activity_field(activity, 'moonPhase', 'extended')
+    # 0.0 is new, .5 is full, 1.0 is new
+    return ((0.5 - (abs(0.5 - activity['moonPhase']))) / 0.5) * 100.0
 
 
 def is_solstice(activity, solstice):

@@ -66,7 +66,7 @@ def parse_args(argv):
 
     if not os.path.isfile(args.credentials_file):
         parser.error('No such credentials file: %s' % (args.credentials_file))
-    if not os.path.isfile(args.input):
+    if args.input and not os.path.isfile(args.input):
         parser.error('No such badge data file: %s' % (args.input))
 
     with open(args.credentials_file, 'r') as fh:
@@ -112,7 +112,7 @@ def main(args):
             # Assume these are sorted already
             activities = json.load(fh)
     else:
-        for a in smashrun.get_activities(since=start):
+        for a in smashrun.get_activities(since=start, style='summary'):
             activities.append(a)
 
         # Reverse the activities to go through them oldest to newest

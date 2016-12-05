@@ -30,7 +30,6 @@
 
 import calendar
 import copy
-import geocoder
 import logging
 import math
 from datetime import timedelta
@@ -133,9 +132,9 @@ class BadgeSet(object):
         self._badges[205] = InternationalSuperRunner()
         self._badges[206] = SpecialAgent()
         # self._badges[207] = TBD_NCAAFitnessTest()
-        self._badges[208] = FrenchForeignLegion()
+        # self._badges[208] = FrenchForeignLegion()
         self._badges[209] = SuperAgent()
-        self._badges[210] = ArmyRanger()
+        # self._badges[210] = ArmyRanger()
         # self._badges[211] = TBD_FastStart5k()
         # self._badges[212] = TBD_FastFinish5k()
         # self._badges[213] = TBD_FastMiddle10k()
@@ -151,11 +150,11 @@ class BadgeSet(object):
         self._badges[223] = FourFarFurther()
         self._badges[224] = SixFarFurther()
         self._badges[225] = FurtherToFarther()
-        # self._badges[226] = ShortAndSteady()
-        # self._badges[227] = LongAndSteady()
-        # self._badges[228] = ShortAndSolid()
-        # self._badges[229] = LongAndSolid()
-        # self._badges[230] = LongAndRockSolid()
+        self._badges[226] = ShortAndSteady()
+        self._badges[227] = LongAndSteady()
+        self._badges[228] = ShortAndSolid()
+        self._badges[229] = LongAndSolid()
+        self._badges[230] = LongAndRockSolid()
         self._badges[231] = TwoBy33()
         self._badges[232] = TwoBy99()
         self._badges[233] = TwoBy33By10k()
@@ -1147,7 +1146,7 @@ class SingleElevationBadge(Badge):
         self.height = height
 
     def _add_activity(self, activity):
-        delta = sru.elevation_delta(activity)
+        delta = sru.elevation_gain(activity)
         if delta >= self.height:
             self.acquire(activity)
 
@@ -1192,7 +1191,7 @@ class MonthlyElevationBadge(CountingUnitsBadge):
         if sru.is_different_month(self.datetime_of_lastrun, start_date):
             self.reset()
 
-        return sru.elevation_delta(activity)
+        return sru.elevation_gain(activity)
 
 
 class TopOfTable(MonthlyElevationBadge):
@@ -1226,38 +1225,46 @@ class ConqueredEverest(MonthlyElevationBadge):
 #
 ####################################################
 class PaceVariabilityBadge(CountingBadge):
-    def __init__(self, name, distance, limit, tolerance):
+    def __init__(self, name, limit, distance, tolerance):
         super(PaceVariabilityBadge, self).__init__(name, limit)
+        self.distance = distance
         self.tolerance = tolerance
 
     def increment(self, activity):
-        assert False, "Waiting for API to include this info"
+        logging.debug("%s: Distance: %s (Min: %s), PaceVariability: %s (Max: %s)" %
+                      (sru.get_start_time(activity),
+                       sru.get_distance(activity).to(self.distance.units),
+                       self.distance,
+                       sru.get_pace_variability(activity),
+                       self.tolerance))
+        if sru.get_distance(activity) >= self.distance and sru.get_pace_variability(activity) <= self.tolerance:
+            return 1
         return 0
 
 
 class ShortAndSteady(PaceVariabilityBadge):
     def __init__(self):
-        super(ShortAndSteady, self).__init__('Short and steady', 5 * UNITS.kilometer, 10, .05)
+        super(ShortAndSteady, self).__init__('Short and steady', 10, 5 * UNITS.kilometer, .05)
 
 
 class LongAndSteady(PaceVariabilityBadge):
     def __init__(self):
-        super(LongAndSteady, self).__init__('Long and steady', 10 * UNITS.kilometer, 10, .05)
+        super(LongAndSteady, self).__init__('Long and steady', 10, 10 * UNITS.kilometer, .05)
 
 
 class ShortAndSolid(PaceVariabilityBadge):
     def __init__(self):
-        super(ShortAndSolid, self).__init__('Short and solid', 5 * UNITS.kilometer, 10, .04)
+        super(ShortAndSolid, self).__init__('Short and solid', 10, 5 * UNITS.kilometer, .04)
 
 
 class LongAndSolid(PaceVariabilityBadge):
     def __init__(self):
-        super(LongAndSolid, self).__init__('Long and solid', 10 * UNITS.kilometer, 10, .04)
+        super(LongAndSolid, self).__init__('Long and solid', 10, 10 * UNITS.kilometer, .04)
 
 
 class LongAndRockSolid(PaceVariabilityBadge):
     def __init__(self):
-        super(LongAndRockSolid, self).__init__('Long and rock solid', 10 * UNITS.kilometer, 10, .03)
+        super(LongAndRockSolid, self).__init__('Long and rock solid', 10, 10 * UNITS.kilometer, .03)
 
 
 ####################################################
@@ -1299,22 +1306,14 @@ class SuperAgent(AgentBadge):
 #
 ####################################################
 class LocationAwareBadge(CountingBadge):
-    GEOCACHE = {}
     def __init__(self, name, limit, addr_key):
         super(LocationAwareBadge, self).__init__(name, limit)
         self.addr_key = addr_key
         self.locations = set()
 
     def increment(self, activity):
-        if activity['activityId'] in LocationAwareBadge.GEOCACHE:
-            logging.debug("%s: GEOCACHE_HIT  for %s" % (self.name, activity['activityId']))
-            loc = LocationAwareBadge.GEOCACHE[activity['activityId']]
-        else:
-            logging.debug("%s: GEOCACHE_MISS for %s" % (self.name, activity['activityId']))
-            loc = geocoder.google(list(sru.get_start_coordinates(activity)), method='reverse', key=self.google_apikey)
-            LocationAwareBadge.GEOCACHE[activity['activityId']] = loc
+        value = sru.get_location(activity, self.addr_key)
 
-        value = getattr(loc, self.addr_key)
         delta = 0
         if value is not None:
             if value not in self.locations:
@@ -1331,13 +1330,13 @@ class USofR(LocationAwareBadge):
 
 class International(LocationAwareBadge):
     def __init__(self):
-        super(International, self).__init__('International', 2, 'country')
+        super(International, self).__init__('International', 2, 'countryCode')
         self.states = set()
 
 
 class InternationalSuperRunner(LocationAwareBadge):
     def __init__(self):
-        super(InternationalSuperRunner, self).__init__('International Super Runner', 10, 'country')
+        super(InternationalSuperRunner, self).__init__('International Super Runner', 10, 'countryCode')
         self.states = set()
 
 
@@ -1391,12 +1390,14 @@ class FourCorners(Badge):
 class FullMoonRunner(CountingBadge):
     def __init__(self):
         super(FullMoonRunner, self).__init__('Full Moon Runner', 10, requires_unique_days=True)
-        self.full_pct = 99.0
+        self.full_pct = 96.0  # Value Chris says Smashrun uses
 
     def increment(self, activity):
+        start_date = sru.get_start_time(activity)
         pct_ill = sru.get_moon_illumination_pct(activity)
+        logging.debug("%s Moon %%: %s" % (start_date, pct_ill))
         if pct_ill > self.full_pct:
-            if sru.is_between_sunset_and_sunrise(activity):
+            if start_date <= sru.get_sunrise(activity) or start_date >= sru.get_sunset(activity):
                 return 1
         return 0
 
@@ -1409,11 +1410,13 @@ class SolsticeBadge(Badge):
         self.sunset = False
 
     def _add_activity(self, activity):
+        start_date = sru.get_start_time(activity)
+        end_date = start_date + timedelta(seconds=sru.get_duration(activity).magnitude)
         if sru.is_solstice(activity, self.solstice):
             logging.debug("Solstice[%s]: %s" % (self.solstice, sru.get_start_time(activity)))
-            if sru.is_sunrise_activity(activity):
+            if start_date <= sru.get_sunrise(activity) and end_date >= sru.get_sunrise(activity):
                 self.sunrise = True
-            if sru.is_sunset_activity(activity):
+            if start_date <= sru.get_sunset(activity) and end_date >= sru.get_sunset(activity):
                 self.sunset = True
 
             if self.sunrise and self.sunset:
@@ -1435,7 +1438,10 @@ class Sunriser(CountingBadge):
         super(Sunriser, self).__init__('Sunriser', 10, requires_unique_days=True)
 
     def increment(self, activity):
-        if sru.is_sunrise_activity(activity):
+        start_date = sru.get_start_time(activity)
+        end_date = start_date + timedelta(seconds=sru.get_duration(activity).magnitude)
+        logging.debug("Sunrise=%s" % (sru.get_sunrise(activity)))
+        if start_date <= sru.get_sunrise(activity) and end_date >= sru.get_sunrise(activity):
             return 1
         return 0
 
@@ -1445,7 +1451,10 @@ class Sunsetter(CountingBadge):
         super(Sunsetter, self).__init__('Sunsetter', 10, requires_unique_days=True)
 
     def increment(self, activity):
-        if sru.is_sunset_activity(activity):
+        start_date = sru.get_start_time(activity)
+        end_date = start_date + timedelta(seconds=sru.get_duration(activity).magnitude)
+        logging.debug("Sunset=%s" % (sru.get_sunset(activity)))
+        if start_date <= sru.get_sunset(activity) and end_date >= sru.get_sunset(activity):
             return 1
         return 0
 

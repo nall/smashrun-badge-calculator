@@ -140,7 +140,7 @@ def fix_start_date(activity, google_apikey):
             fixed_date = start_date.replace(tzinfo=tz_offset)
             label = 'Fixed ID=%s' % (activity['activityId'])
             logging.info('%s PREV: %s' % (label, start_date))
-            logging.info('%s  CUR: %s' % (' ' * len(label), fixed_date))
+            logging.info('%s  NEW: %s' % (' ' * len(label), fixed_date))
             fixed_string = fixed_date.strftime('%Y-%m-%dT%H:%M:%S%z')
             # Fixup the missing colon
             fixed_string = fixed_string[:-2] + ':' + fixed_string[-2:]
@@ -160,17 +160,18 @@ def main(args):
     else:
         ids = []
         # Get the briefs first to filter on start date to avoid pulling so much data
-        for a in smashrun.get_activities(since=args.start, style='briefs'):
+        for a in smashrun.get_activities(since=args.start, style='extended'):
             start_date = sru.get_start_time(a)
             if start_date <= args.stop:
                 ids.append(a['activityId'])
+                activities.append(a)
         logging.info("Found %d activities in desired time range" % (len(ids)))
 
-        count = 0
-        for activity_id in ids:
-            count += 1
-            logging.info("Downloading activity %s/%s" % (count, len(ids)))
-            activities.append(smashrun.get_activity(activity_id))
+        #count = 0
+        #for activity_id in ids:
+        #    count += 1
+        #    logging.info("Downloading activity %s/%s" % (count, len(ids)))
+        #    activities.append(smashrun.get_activity(activity_id))
 
     # Sort activities oldest to newest
     activities = sorted(activities, key=sru.get_start_time)
