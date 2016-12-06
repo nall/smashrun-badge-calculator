@@ -121,9 +121,10 @@ def main(args):
     for a in activities:
         badgeset.add_activity(a)
 
-    logging.info("ACQUIRED BADGES")
+    acquired_badges = sorted([x for x in badgeset.badges if x.acquired], key=lambda x: x.actualEarnedDate)
+    logging.info("ACQUIRED BADGES (Total=%d)" % (len(acquired_badges)))
     logging.info("---------------")
-    for b in sorted([x for x in badgeset.badges if x.acquired], key=lambda x: x.actualEarnedDate):
+    for b in acquired_badges:
         logging.info("%s %s" % (b.actualEarnedDate.strftime('%Y-%m-%d'), b.name))
 
 if __name__ == '__main__':
