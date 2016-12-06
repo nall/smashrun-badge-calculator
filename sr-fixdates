@@ -38,7 +38,7 @@ import pprint
 import requests
 import sys
 import yaml
-import smashrun.utils as sru
+import smashrun_utils.utils as sru
 from dateutil.tz import tzoffset
 from datetime import datetime
 from smashrun.client import Smashrun
