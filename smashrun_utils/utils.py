@@ -29,6 +29,7 @@
 
 import dateutil
 import ephem
+import re
 import sys
 from datetime import datetime
 from datetime import timedelta
@@ -44,7 +45,10 @@ def srdate_to_datetime(datestring, utc=False):
 
     if utc:
         dt = datestring
-        fmt = '%Y-%m-%dT%H:%M:%S.%f'
+        if re.search(r'\.\d+$', dt):
+            fmt = '%Y-%m-%dT%H:%M:%S.%f'
+        else:
+            fmt = '%Y-%m-%dT%H:%M:%S'
         to_zone = dateutil.tz.tzlocal()
     else:
         dt = datestring[:-6]

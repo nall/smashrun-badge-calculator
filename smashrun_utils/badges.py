@@ -29,176 +29,229 @@
 
 
 import calendar
+import collections
 import copy
 import logging
 import math
 from datetime import timedelta
+from datetime import datetime
 import utils as sru
 
 
 UNITS = sru.UNITS
 
 
-class BadgeSet(object):
-    def __init__(self, start_date, google_apikey=None, only_ids=[]):
-        self.start_date = start_date
-
-        self._badges = {}
-        self._badges[1] = EarlyBird()
-        self._badges[2] = NightOwl()
-        self._badges[3] = LunchHour()
-        self._badges[4] = Popular()
-        self._badges[5] = OCD()
-        self._badges[6] = OneMile()
-        self._badges[7] = Marathoner()
-        self._badges[8] = UltraMarathoner()
-        self._badges[9] = HalfMarathoner()
-        self._badges[10] = TenKer()
-        self._badges[11] = BeatA9YearOld()
-        self._badges[12] = PoundedPalin()
-        self._badges[13] = PastDiddy()
-        self._badges[14] = UnderOprah()
-        self._badges[15] = ClearedKate()
-        self._badges[16] = FiveForFive()
-        self._badges[17] = TenForTen()
-        self._badges[18] = TwentyForTwenty()
-        self._badges[19] = FiftyForFifty()
-        self._badges[20] = Perfect100()
-        self._badges[21] = TenUnderYourBelt()
-        self._badges[22] = TwentyUnderYourBelt()
-        self._badges[23] = FiftyUnderYourBelt()
-        self._badges[24] = ACenturyDown()
-        self._badges[25] = Monster500()
-        self._badges[26] = SolidWeek()
-        self._badges[27] = RockedTheWeek()
-        self._badges[28] = SolidMonth()
-        self._badges[29] = RockedTheMonth()
-        self._badges[30] = RunNutMonth()
-        self._badges[31] = Veteran()
-        self._badges[32] = GuineaPig()
-        self._badges[33] = FiveKer()
-        self._badges[34] = BirthdayRun()
-        self._badges[35] = Corleone()
-        self._badges[36] = BroughtABuddy()
-        self._badges[37] = GotFriends()
-        self._badges[38] = SocialSeven()
-        self._badges[39] = SharesWell()
-        self._badges[40] = PackLeader()
-        self._badges[101] = NYCPhilly()
-        self._badges[102] = LondonParis()
-        self._badges[103] = SydneyMelbourne()
-        self._badges[104] = NYCChicago()
-        self._badges[105] = MiamiToronto()
-        self._badges[106] = ChariotsOfFire()
-        self._badges[107] = WentToWork()
-        self._badges[108] = ThatsADay()
-        self._badges[109] = WeekNotWeak()
-        self._badges[110] = OutlastTheAlamo()
-        self._badges[111] = ChillRunner()
-        self._badges[112] = EasyRunner()
-        self._badges[113] = RoadRunner()
-        self._badges[114] = Mercury()
-        self._badges[115] = FastAndSlow()
-        self._badges[126] = Stairs()
-        self._badges[127] = SteepStairs()
-        self._badges[128] = LongStairs()
-        self._badges[129] = LongSteepStairs()
-        self._badges[130] = ToweringStairs()
-        self._badges[131] = InItForJanuary()
-        self._badges[132] = InItForFebruary()
-        self._badges[133] = InItForMarch()
-        self._badges[134] = InItForApril()
-        self._badges[135] = InItForMay()
-        self._badges[136] = InItForJune()
-        self._badges[137] = InItForJuly()
-        self._badges[138] = InItForAugust()
-        self._badges[139] = InItForSeptember()
-        self._badges[140] = InItForOctober()
-        self._badges[141] = InItForNovember()
-        self._badges[142] = InItForDecember()
-        self._badges[143] = ColorPicker()
-        self._badges[144] = ThreeSixtyFiveDays()
-        self._badges[145] = ThreeSixtyFiveOf730()
-        self._badges[146] = ThreeSixtyFiveOf365()
-        self._badges[147] = AYearInRunning()
-        self._badges[148] = LeapYearSweep()
-        self._badges[149] = SmashrunForLife()
-        self._badges[150] = Translator()
-        # self._badges[151] = TBD_UltraUltra100k()
-        self._badges[201] = USofR()
-        self._badges[202] = International()
-        self._badges[203] = TopAndBottom()
-        self._badges[204] = FourCorners()
-        self._badges[205] = InternationalSuperRunner()
-        self._badges[206] = SpecialAgent()
-        # self._badges[207] = TBD_NCAAFitnessTest()
-        # self._badges[208] = FrenchForeignLegion()
-        self._badges[209] = SuperAgent()
-        # self._badges[210] = ArmyRanger()
-        # self._badges[211] = TBD_FastStart5k()
-        # self._badges[212] = TBD_FastFinish5k()
-        # self._badges[213] = TBD_FastMiddle10k()
-        # self._badges[214] = TBD_FastStartAndFinish5k()
-        # self._badges[215] = TBD_SuperFastStart5k()
-        self._badges[216] = Sunriser()
-        self._badges[217] = FullMoonRunner()
-        self._badges[218] = Sunsetter()
-        self._badges[219] = LongestDay()
-        self._badges[220] = ShortestDay()
-        self._badges[221] = FourFurther()
-        self._badges[222] = SixFurther()
-        self._badges[223] = FourFarFurther()
-        self._badges[224] = SixFarFurther()
-        self._badges[225] = FurtherToFarther()
-        self._badges[226] = ShortAndSteady()
-        self._badges[227] = LongAndSteady()
-        self._badges[228] = ShortAndSolid()
-        self._badges[229] = LongAndSolid()
-        self._badges[230] = LongAndRockSolid()
-        self._badges[231] = TwoBy33()
-        self._badges[232] = TwoBy99()
-        self._badges[233] = TwoBy33By10k()
-        self._badges[234] = TwoBy99By5k()
-        self._badges[235] = TwoBy365By10k()
-        self._badges[236] = TopOfTable()
-        self._badges[237] = ClimbedHalfDome()
-        self._badges[238] = ReachedFitzRoy()
-        self._badges[239] = MatterhornMaster()
-        self._badges[240] = ConqueredEverest()
-        self._badges[241] = ToweredPisa()
-        self._badges[242] = TopOfWashington()
-        self._badges[243] = OverTheEiffel()
-        self._badges[244] = AboveTheBurj()
-        self._badges[245] = ToPikesPeak()
-
-        if len(only_ids):
-            keys_to_del = [x for x in self._badges.keys() if x not in only_ids]
-            for key in keys_to_del:
-                del self._badges[key]
-
-        for badge in self._badges.values():
-            badge.google_apikey = google_apikey
+class BadgeCollection(object):
+    def __init__(self, **kwargs):
+        self._series = []
+        self._series.append(TravisSeries(**kwargs))
+        self._series.append(KellySeries(**kwargs))
+        self._series.append(ProSeries(**kwargs))
+        self._series.append(LimitedSeries(**kwargs))
 
     @property
     def badges(self):
-        return self._badges.values()
+        badges = []
+        for series in self._series:
+            badges.extend(series.badges)
+        return badges
 
-    def add_user_info(self, info):
-        logging.debug("Adding user info for ID=%s %s" % (info['id'], info['name']))
-        if info['id'] not in self._badges:
-            logging.warning("Not adding user info for badge. Not implemented yet")
-        else:
-            self._badges[info['id']].add_user_info(info)
+    def add_activity(self, activity):
+        for series in self._series:
+            series.add_activity(activity)
 
     def add_activity(self, activity):
         start_date = sru.get_start_time(activity)
-        if self.start_date is None or start_date >= self.start_date:
-            logging.debug("Adding activity %s %s" % (sru.get_start_time(activity), activity['activityId']))
-            for b in self.badges:
-                logging.debug("Checking %s" % (b.name))
-                b._add_activity(activity)
+        for series in self._series:
+            if start_date >= series.start_date:
+                logging.debug("%s: adding activity %s ID=%s" % (series.name, start_date, activity['activityId']))
+                series.add_activity(activity)
         else:
-            logging.debug("Skipping activity %s that occured before %s" % (activity['activityId'], self.start_date))
+            logging.debug("%s: skipping activity %s that occured before %s" % (series.name, activity['activityId'], series.start_date))
+
+
+class BadgeSeries(object):
+    def __init__(self, name, series_id, start_date, userinfo={}, user_badge_info={}, gender=None, birthday=None, google_apikey=None, id_filter=[]):
+        self.name = name
+        self.series_id = series_id
+        self.start_date = start_date
+        self.userinfo = copy.copy(userinfo)
+        self.user_badge_info = collections.OrderedDict()
+        for badge in user_badge_info:
+            self.user_badge_info[badge['id']] = badge
+        self.birthday = birthday
+        self.gender = gender
+        self.google_apikey = google_apikey
+        self.id_filter = copy.copy(id_filter)
+        self._badges = collections.OrderedDict()
+
+    @property
+    def badges(self):
+        return copy.copy(self._badges.values())
+
+    def add_badge(self, badge_id, instance):
+        if len(self.id_filter) == 0 or badge_id in self.id_filter:
+            self._badges[badge_id] = instance
+            instance.google_apikey = self.google_apikey
+            if badge_id in self.user_badge_info:
+                instance.add_user_badge_info(self.user_badge_info[badge_id])
+
+    def add_activity(self, activity):
+        for b in self._badges.values():
+            b.add_activity(activity)
+
+class TravisSeries(BadgeSeries):
+    def __init__(self, userinfo={}, birthday=None, **kwargs):
+        start_date = sru.srdate_to_datetime(userinfo['registrationDateUTC'], utc=True)
+        super(TravisSeries, self).__init__('Travis series', 1, start_date, userinfo=userinfo, birthday=birthday, **kwargs)
+
+        self.add_badge(1, EarlyBird())
+        self.add_badge(2, NightOwl())
+        self.add_badge(3, LunchHour())
+        self.add_badge(4, Popular())
+        self.add_badge(5, OCD())
+        self.add_badge(6, OneMile())
+        self.add_badge(7, Marathoner())
+        self.add_badge(8, UltraMarathoner())
+        self.add_badge(9, HalfMarathoner())
+        self.add_badge(10, TenKer())
+        self.add_badge(11, BeatA9YearOld())
+        self.add_badge(12, PoundedPalin())
+        self.add_badge(13, PastDiddy())
+        self.add_badge(14, UnderOprah())
+        self.add_badge(15, ClearedKate())
+        self.add_badge(16, FiveForFive())
+        self.add_badge(17, TenForTen())
+        self.add_badge(18, TwentyForTwenty())
+        self.add_badge(19, FiftyForFifty())
+        self.add_badge(20, Perfect100())
+        self.add_badge(21, TenUnderYourBelt())
+        self.add_badge(22, TwentyUnderYourBelt())
+        self.add_badge(23, FiftyUnderYourBelt())
+        self.add_badge(24, ACenturyDown())
+        self.add_badge(25, Monster500())
+        self.add_badge(26, SolidWeek())
+        self.add_badge(27, RockedTheWeek())
+        self.add_badge(28, SolidMonth())
+        self.add_badge(29, RockedTheMonth())
+        self.add_badge(30, RunNutMonth())
+        self.add_badge(32, GuineaPig())
+        self.add_badge(33, FiveKer())
+        self.add_badge(34, BirthdayRun(birthday))
+        # Corleone is now Limited
+        self.add_badge(36, BroughtABuddy())
+        self.add_badge(37, GotFriends())
+        self.add_badge(38, SocialSeven())
+        self.add_badge(39, SharesWell())
+        self.add_badge(40, PackLeader())
+
+class KellySeries(BadgeSeries):
+    def __init__(self, userinfo={}, **kwargs):
+        start_date = sru.srdate_to_datetime(userinfo['registrationDateUTC'], utc=True)
+        super(KellySeries, self).__init__('Kelly series', 2, start_date, **kwargs)
+
+        self.add_badge(101, NYCPhilly())
+        self.add_badge(102, LondonParis())
+        self.add_badge(103, SydneyMelbourne())
+        self.add_badge(104, NYCChicago())
+        self.add_badge(105, MiamiToronto())
+        self.add_badge(106, ChariotsOfFire())
+        self.add_badge(107, WentToWork())
+        self.add_badge(108, ThatsADay())
+        self.add_badge(109, WeekNotWeak())
+        self.add_badge(110, OutlastTheAlamo())
+        self.add_badge(111, ChillRunner())
+        self.add_badge(112, EasyRunner())
+        self.add_badge(113, RoadRunner())
+        self.add_badge(114, Mercury())
+        self.add_badge(115, FastAndSlow())
+        self.add_badge(126, Stairs())
+        self.add_badge(127, SteepStairs())
+        self.add_badge(128, LongStairs())
+        self.add_badge(129, LongSteepStairs())
+        self.add_badge(130, ToweringStairs())
+        self.add_badge(131, InItForJanuary())
+        self.add_badge(132, InItForFebruary())
+        self.add_badge(133, InItForMarch())
+        self.add_badge(134, InItForApril())
+        self.add_badge(135, InItForMay())
+        self.add_badge(136, InItForJune())
+        self.add_badge(137, InItForJuly())
+        self.add_badge(138, InItForAugust())
+        self.add_badge(139, InItForSeptember())
+        self.add_badge(140, InItForOctober())
+        self.add_badge(141, InItForNovember())
+        self.add_badge(142, InItForDecember())
+        self.add_badge(143, ColorPicker())
+        self.add_badge(144, ThreeSixtyFiveDays())
+        self.add_badge(145, ThreeSixtyFiveOf730())
+        self.add_badge(146, ThreeSixtyFiveOf365())
+        self.add_badge(147, AYearInRunning())
+        self.add_badge(148, LeapYearSweep())
+        self.add_badge(150, Translator())
+
+
+class ProSeries(BadgeSeries):
+    def __init__(self, userinfo={}, birthday=None, gender=None, **kwargs):
+        start_date = sru.srdate_to_datetime(userinfo['proBadgeDateUTC'], utc=True)
+        super(ProSeries, self).__init__('Pro series', 3, start_date, birthday=birthday, gender=gender, **kwargs)
+
+        self.add_badge(201, USofR())
+        self.add_badge(202, International())
+        self.add_badge(203, TopAndBottom())
+        self.add_badge(204, FourCorners())
+        self.add_badge(205, InternationalSuperRunner())
+        self.add_badge(206, SpecialAgent(birthday, gender))
+        # self.add_badge(207, TBD_NCAAFitnessTest())
+        # self.add_badge(208, FrenchForeignLegion())
+        self.add_badge(209, SuperAgent(birthday, gender))
+        # self.add_badge(210, ArmyRanger())
+        # self.add_badge(211, TBD_FastStart5k())
+        # self.add_badge(212, TBD_FastFinish5k())
+        # self.add_badge(213, TBD_FastMiddle10k())
+        # self.add_badge(214, TBD_FastStartAndFinish5k())
+        # self.add_badge(215, TBD_SuperFastStart5k())
+        self.add_badge(216, Sunriser())
+        self.add_badge(217, FullMoonRunner())
+        self.add_badge(218, Sunsetter())
+        self.add_badge(219, LongestDay())
+        self.add_badge(220, ShortestDay())
+        self.add_badge(221, FourFurther())
+        self.add_badge(222, SixFurther())
+        self.add_badge(223, FourFarFurther())
+        self.add_badge(224, SixFarFurther())
+        self.add_badge(225, FurtherToFarther())
+        self.add_badge(226, ShortAndSteady())
+        self.add_badge(227, LongAndSteady())
+        self.add_badge(228, ShortAndSolid())
+        self.add_badge(229, LongAndSolid())
+        self.add_badge(230, LongAndRockSolid())
+        self.add_badge(231, TwoBy33())
+        self.add_badge(232, TwoBy99())
+        self.add_badge(233, TwoBy33By10k())
+        self.add_badge(234, TwoBy99By5k())
+        self.add_badge(235, TwoBy365By10k())
+        self.add_badge(236, TopOfTable())
+        self.add_badge(237, ClimbedHalfDome())
+        self.add_badge(238, ReachedFitzRoy())
+        self.add_badge(239, MatterhornMaster())
+        self.add_badge(240, ConqueredEverest())
+        self.add_badge(241, ToweredPisa())
+        self.add_badge(242, TopOfWashington())
+        self.add_badge(243, OverTheEiffel())
+        self.add_badge(244, AboveTheBurj())
+        self.add_badge(245, ToPikesPeak())
+
+
+class LimitedSeries(BadgeSeries):
+    def __init__(self, userinfo={}, **kwargs):
+        start_date = sru.srdate_to_datetime(userinfo['registrationDateUTC'], utc=True)
+        super(LimitedSeries, self).__init__('Limited series', 0, start_date, **kwargs)
+
+        self.add_badge(31, Veteran())
+        self.add_badge(35, Corleone())
+        self.add_badge(149, SmashrunForLife())
+        self.add_badge(151, TwentyFourHours())
 
 
 class Badge(object):
@@ -211,7 +264,7 @@ class Badge(object):
         self.requires_unique_days = requires_unique_days
         self.activities = {}
 
-    def add_user_info(self, info):
+    def add_user_badge_info(self, info):
         self.info = copy.copy(info)
 
     def add_activity(self, activity):
@@ -805,9 +858,10 @@ class NoActivityBadge(Badge):
     def _add_activity(self, activity):
         pass
 
-    def add_user_info(self, info):
-        super(NoActivityBadge, self).add_user_info(info)
+    def add_user_badge_info(self, info):
+        super(NoActivityBadge, self).add_user_badge_info(info)
         self.actualEarnedDate = sru.get_badge_earned_time(info)
+        logging.info("EARNED %s: %s" % (self.name, self.actualEarnedDate))
 
 
 class Popular(NoActivityBadge):
@@ -825,9 +879,21 @@ class GuineaPig(NoActivityBadge):
         super(GuineaPig, self).__init__('Guinea pig')
 
 
-class BirthdayRun(NoActivityBadge):
-    def __init__(self):
+class BirthdayRun(Badge):
+    def __init__(self, birthday):
         super(BirthdayRun, self).__init__('Birthday Run')
+        self.birthday = birthday
+
+    def add_user_badge_info(self, info):
+        super(BirthdayRun, self).add_user_badge_info(info)
+        if self.birthday is None:
+            self.actualEarnedDate = sru.get_badge_earned_time(info)
+
+    def _add_activity(self, activity):
+        if self.birthday is not None:
+            start_date = sru.get_start_time(activity)
+            if start_date.month == self.birthday.month and start_date.day == self.birthday.day:
+                self.acquire(activity)
 
 
 class BroughtABuddy(NoActivityBadge):
@@ -1273,31 +1339,68 @@ class LongAndRockSolid(PaceVariabilityBadge):
 #
 ####################################################
 class AgentBadge(Badge):
-    def __init__(self, name, min_distance, max_pace):
+    def __init__(self, name, birthday, gender, agent_type):
         super(AgentBadge, self).__init__(name)
-        self.min_distance = min_distance
-        self.max_pace = max_pace
+        self.min_distance = 1.5 * UNITS.miles
+        self.agent_type = agent_type
+
+        if birthday is None:
+            self.age = 20
+        else:
+            self.age = int(datetime.now().year - birthday.year)
+
+        if gender is None:
+            self.gender = 'male'
+        else:
+            self.gender = gender
+        logging.debug("Agent using %dyo %s for data" % (self.age, self.gender))
+
+        self.pace_table = {'agent': { 'male': {}, 'female': {} }, 
+                           'superagent': { 'male': {}, 'female': {} }}
+
+        for i in range(1, 30):
+            self.pace_table['agent']['male'][i] = 11.6027
+            self.pace_table['agent']['female'][i] = 9.6027
+            self.pace_table['superagent']['male'][i] = 15.8008
+            self.pace_table['superagent']['female'][i] = 14.0168
+
+        for i in range(30, 40):
+            self.pace_table['agent']['male'][i] = 11.2425
+            self.pace_table['agent']['female'][i] = 9.0904
+            self.pace_table['superagent']['male'][i] = 15.2197
+            self.pace_table['superagent']['female'][i] = 13.0096
+
+        for i in range(40, 50):
+            self.pace_table['agent']['male'][i] = 10.4704
+            self.pace_table['agent']['female'][i] = 8.4291
+            self.pace_table['superagent']['male'][i] = 14.8048
+            self.pace_table['superagent']['female'][i] = 12.5042
+
+        for i in range(50, 200):
+            self.pace_table['agent']['male'][i] = 9.5081
+            self.pace_table['agent']['female'][i] = 7.5569
+            self.pace_table['superagent']['male'][i] = 13.8603
+            self.pace_table['superagent']['female'][i] = 10.9176
 
     def _add_activity(self, activity):
         distance = sru.get_distance(activity)
-        pace = sru.avg_pace(activity, keep_units=True)
-        if distance >= self.min_distance and pace <= self.max_pace:
-            self.acquire(activity)
+        if distance >= self.min_distance:
+            speed = 1.0 / sru.avg_pace(activity, distance_unit=UNITS.kilometers, time_unit=UNITS.hour)
+            min_speed = self.pace_table[self.agent_type][self.gender][self.age]
+            logging.debug("%s: Speed %s, MinSpeed: %s" % (self.name, speed, min_speed))
+            if speed >= min_speed:
+                self.acquire(activity)
 
 
 class SpecialAgent(AgentBadge):
-    def __init__(self):
-        super(SpecialAgent, self).__init__('Special Agent',
-                                           1.5 * UNITS.miles,
-                                           ((9 * UNITS.minutes) + (13 * UNITS.seconds)) / (1 * UNITS.miles))
+    def __init__(self, gender, birthday):
+        super(SpecialAgent, self).__init__('Special Agent', gender, birthday, 'agent')
 
 
 class SuperAgent(AgentBadge):
     # FIXME: These are hardcoded. Should they come from the FBI percentile tables
-    def __init__(self):
-        super(SuperAgent, self).__init__('Super Agent',
-                                         1.5 * UNITS.miles,
-                                         ((6 * UNITS.minutes) + (31 * UNITS.seconds)) / (1 * UNITS.miles))
+    def __init__(self, gender, birthday):
+        super(SuperAgent, self).__init__('Super Agent', gender, birthday, 'superagent')
 
 
 ####################################################
@@ -1496,6 +1599,6 @@ class TwentyFourHours(Badge):
         self.min_time = 24 * UNITS.hours
         self.min_dist = 100 * UNITS.kilometers
 
-    def add_activity(self, activity):
+    def _add_activity(self, activity):
         if sru.get_duration(activity) >= self.min_time and sru.get_distance(activity) >= self.min_distance:
             self.acquire(activity)

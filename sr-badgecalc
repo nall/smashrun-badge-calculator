@@ -37,8 +37,9 @@ import logging
 import os
 import sys
 import yaml
+import smashrun_utils.utils as sru
 from smashrun.client import Smashrun
-from smashrun_utils.badges import BadgeSet
+from smashrun_utils.badges import BadgeCollection
 
 
 def smashrun_client(client_id=None, client_secret=None, refresh_token=None, access_token=None):
@@ -57,7 +58,7 @@ def smashrun_client(client_id=None, client_secret=None, refresh_token=None, acce
 
 def parse_args(argv):
     parser = argparse.ArgumentParser()
-    parser.add_argument('--badge-start-date', type=str,                  help='Start considering runs on or after this date for badges (YYYY/mm/dd)')
+    parser.add_argument('--birthday',         type=str, required=True,   help='Use this date as the user\'s birthday')
     parser.add_argument('--credentials_file', type=str, required=True,   help='The name of the file holding service credentials')
     parser.add_argument('--input',            type=str,                  help='The name of a JSON file holding activities to avoid querying Smashrun servers')
     parser.add_argument('--badgeid',          type=int, action='append', help='Test the specified badge ID. Can be specified multiple times')
@@ -73,8 +74,8 @@ def parse_args(argv):
         setattr(args, 'credentials', yaml.load(fh))
         args.credentials.setdefault('smashrun', None)
 
-    if args.badge_start_date:
-        args.badge_start_date = datetime.datetime.strptime(args.badge_start_date, '%Y-%m-%d').replace(tzinfo=dateutil.tz.tzlocal())
+    if args.birthday:
+        args.birthday = datetime.datetime.strptime(args.birthday, '%Y-%m-%d')
 
     if args.badgeid is None:
         args.badgeid = []
@@ -100,23 +101,23 @@ def main(args):
     smashrun = smashrun_client(**args.credentials['smashrun'])
 
     # Update user badges
-    badgeset = BadgeSet(args.badge_start_date, args.credentials['google_apikey'], args.badgeid)
-    for userbadge in smashrun.get_badges():
-        badgeset.add_user_info(userbadge)
+    badgeset = BadgeCollection(userinfo=smashrun.get_userinfo(),
+                               user_badge_info=smashrun.get_badges(),
+                               birthday=args.birthday,
+                               google_apikey=args.credentials['google_apikey'],
+                               id_filter=args.badgeid)
 
     start = datetime.datetime.now() - datetime.timedelta(days=335)
     logging.info("Retriving SmashRuns START: %s" % (start))
     activities = []
     if args.input:
         with open(args.input, 'r') as fh:
-            # Assume these are sorted already
             activities = json.load(fh)
     else:
-        for a in smashrun.get_activities(since=start, style='summary'):
+        for a in smashrun.get_activities(since=start, style='extended'):
             activities.append(a)
 
-        # Reverse the activities to go through them oldest to newest
-        activities.reverse()
+    activities = sorted(activities, key=sru.get_start_time)
 
     for a in activities:
         badgeset.add_activity(a)
