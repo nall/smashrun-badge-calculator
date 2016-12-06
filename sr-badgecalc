@@ -104,7 +104,6 @@ def main(args):
     badgeset = BadgeCollection(userinfo=smashrun.get_userinfo(),
                                user_badge_info=smashrun.get_badges(),
                                birthday=args.birthday,
-                               google_apikey=args.credentials['google_apikey'],
                                id_filter=args.badgeid)
 
     start = datetime.datetime.now() - datetime.timedelta(days=335)

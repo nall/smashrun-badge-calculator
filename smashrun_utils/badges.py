@@ -71,7 +71,7 @@ class BadgeCollection(object):
 
 
 class BadgeSeries(object):
-    def __init__(self, name, series_id, start_date, userinfo={}, user_badge_info={}, gender=None, birthday=None, google_apikey=None, id_filter=[]):
+    def __init__(self, name, series_id, start_date, userinfo={}, user_badge_info={}, gender=None, birthday=None, id_filter=[]):
         self.name = name
         self.series_id = series_id
         self.start_date = start_date
@@ -81,7 +81,6 @@ class BadgeSeries(object):
             self.user_badge_info[badge['id']] = badge
         self.birthday = birthday
         self.gender = gender
-        self.google_apikey = google_apikey
         self.id_filter = copy.copy(id_filter)
         self._badges = collections.OrderedDict()
 
@@ -92,7 +91,6 @@ class BadgeSeries(object):
     def add_badge(self, badge_id, instance):
         if len(self.id_filter) == 0 or badge_id in self.id_filter:
             self._badges[badge_id] = instance
-            instance.google_apikey = self.google_apikey
             if badge_id in self.user_badge_info:
                 instance.add_user_badge_info(self.user_badge_info[badge_id])
 
@@ -260,7 +258,6 @@ class Badge(object):
         self.actualEarnedDate = None
         self.info = {}
         self.name = name
-        self.google_apikey = None
         self.requires_unique_days = requires_unique_days
         self.activities = {}
 
