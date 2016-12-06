@@ -1488,3 +1488,14 @@ class SmashrunForLife(NoActivityBadge):
     # http://smashrun.com/steve.tant/badges-to-go/4
     def __init__(self):
         super(SmashrunForLife, self).__init__('Smashrun for life')
+
+
+class TwentyFourHours(Badge):
+    def __init__(self):
+        super(TwentyFourHours, self).__init__('24 hours')
+        self.min_time = 24 * UNITS.hours
+        self.min_dist = 100 * UNITS.kilometers
+
+    def add_activity(self, activity):
+        if sru.get_duration(activity) >= self.min_time and sru.get_distance(activity) >= self.min_distance:
+            self.acquire(activity)
