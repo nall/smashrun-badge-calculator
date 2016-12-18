@@ -201,7 +201,7 @@ class ProSeries(BadgeSeries):
         self.add_badge(205, InternationalSuperRunner())
         self.add_badge(206, SpecialAgent(birthday, gender))
         # self.add_badge(207, TBD_NCAAFitnessTest())
-        # self.add_badge(208, FrenchForeignLegion())
+        self.add_badge(208, ForeignLegion())
         self.add_badge(209, SuperAgent(birthday, gender))
         # self.add_badge(210, ArmyRanger())
         # self.add_badge(211, TBD_FastStart5k())
@@ -263,6 +263,10 @@ class Badge(object):
 
     def add_user_badge_info(self, info):
         self.info = copy.copy(info)
+
+    @property
+    def requirement(self):
+        return self.info.setdefault('requirement', '')
 
     def add_activity(self, activity):
         # Only allow badges to be acquired once -- Smashrun doesn't have levels (YET!)
@@ -809,10 +813,10 @@ class ArmyRanger(SingleMileageWithinDuration):
         super(ArmyRanger, self).__init__('Army Ranger', 5, 40 * UNITS.minutes)
 
 
-class FrenchForeignLegion(SingleMileageWithinDuration):
+class ForeignLegion(SingleMileageWithinDuration):
     def __init__(self):
         # Effectively a 12min cooper test
-        super(FrenchForeignLegion, self).__init__('French Foreign Legion', 2800, 12 * UNITS.minutes, units=UNITS.meters)
+        super(ForeignLegion, self).__init__('Foreign Legion', 2800, 12 * UNITS.minutes, units=UNITS.meters)
 
 
 class BeatA9YearOld(SingleMileageWithinDuration):
