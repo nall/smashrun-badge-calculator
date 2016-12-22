@@ -816,7 +816,7 @@ class ArmyRanger(SingleMileageWithinDuration):
 class ForeignLegion(SingleMileageWithinDuration):
     def __init__(self):
         # Effectively a 12min cooper test
-        super(ForeignLegion, self).__init__('Foreign Legion', 2800, 12 * UNITS.minutes, units=UNITS.meters)
+        super(ForeignLegion, self).__init__('Foreign Legion', 2800, 12 * UNITS.minutes + 5 * UNITS.seconds, units=UNITS.meters)
 
 
 class BeatA9YearOld(SingleMileageWithinDuration):
