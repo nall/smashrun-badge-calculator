@@ -137,6 +137,7 @@ def fix_start_date(activity, google_apikey):
     else:
         tz_offset = tzoffset(None, offset)
         if tz_offset != start_date.tzinfo:
+            logging.debug("OLD: %s" % (pprint.pformat(activity)))
             fixed_date = start_date.replace(tzinfo=tz_offset)
             label = 'Fixed ID=%s' % (activity['activityId'])
             logging.info('%s PREV: %s' % (label, start_date))
@@ -145,6 +146,10 @@ def fix_start_date(activity, google_apikey):
             # Fixup the missing colon
             fixed_string = fixed_string[:-2] + ':' + fixed_string[-2:]
             activity['startDateTimeLocal'] = fixed_string
+            logging.debug("NEW: %s" % (pprint.pformat(activity)))
+            return True
+
+    return False
 
 
 def main(args):
@@ -160,24 +165,25 @@ def main(args):
     else:
         ids = []
         # Get the briefs first to filter on start date to avoid pulling so much data
-        for a in smashrun.get_activities(since=args.start, style='extended'):
+        for a in smashrun.get_activities(since=args.start, style='briefs'):
             start_date = sru.get_start_time(a)
             if start_date <= args.stop:
                 ids.append(a['activityId'])
-                activities.append(a)
         logging.info("Found %d activities in desired time range" % (len(ids)))
 
-        #count = 0
-        #for activity_id in ids:
-        #    count += 1
-        #    logging.info("Downloading activity %s/%s" % (count, len(ids)))
-        #    activities.append(smashrun.get_activity(activity_id))
+        count = 0
+        for activity_id in ids:
+            count += 1
+            logging.info("Downloading activity %s/%s" % (count, len(ids)))
+            activities.append(smashrun.get_activity(activity_id))
 
     # Sort activities oldest to newest
     activities = sorted(activities, key=sru.get_start_time)
 
     for activity in activities:
-        fix_start_date(activity, args.credentials['google_apikey'])
+        if fix_start_date(activity, args.credentials['google_apikey']):
+            logging.info("Sending fixed activity back to Smashrun")
+            smashrun.update_activity(activity['activityId'], activity)
 
     if args.output:
         logging.info("Saving %s activities to %s" % (len(activities), args.output))
