@@ -116,8 +116,13 @@ def get_elevations(activity):
 
 
 def elevation_gain(activity):
-    assert_activity_field(activity, 'isTreadmill', 'extended')
-    e = 0 if activity['isTreadmill'] else activity['elevationGain']
+    if 'elevationGain' not in activity:
+        logging.warning("No elevationGain for activity ID=%s. Consider correcting it on the website and trying again" % (activity['activityId']))
+        e = 0
+    else:
+        assert_activity_field(activity, 'isTreadmill', 'extended')
+        assert_activity_field(activity, 'elevationGain', 'extended')
+        e = 0 if activity['isTreadmill'] else activity['elevationGain']
     return e * UNITS.meters
 
 
